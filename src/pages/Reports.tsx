@@ -57,7 +57,7 @@ export default function Reports() {
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
                   <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v}%`} />
                   <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [`${v}%`]} />
-                  <Line type="monotone" dataKey="savingsRate" name="저축률" stroke="hsl(var(--chart-income))" strokeWidth={2.5} dot={{ fill: "hsl(var(--chart-income))", r: 4 }} />
+                  <Line type="monotone" dataKey="savingsRate" name="저축률" stroke="hsl(var(--chart-income))" strokeWidth={2.5} dot={{ fill: "hsl(var(--chart-income))", r: 4 }} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
