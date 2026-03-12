@@ -25,27 +25,25 @@ function formatDate(d: string) {
   return d.replace(/-/g, ".");
 }
 
-interface AlertRule {
+/** 글로벌 알림 룰 - 모든 종목에 일괄 적용 */
+interface GlobalAlertRule {
   id: string;
-  ticker: string;
-  name: string;
-  type: "price_above" | "price_below" | "return_above" | "return_below";
-  value: number;
+  type: "cost_drop" | "peak_drop";
+  percent: number;
   active: boolean;
 }
 
-const RULE_LABELS: Record<AlertRule["type"], string> = {
-  price_above: "현재가 ≥",
-  price_below: "현재가 ≤",
-  return_above: "수익률 ≥",
-  return_below: "수익률 ≤",
-};
-
-const RULE_UNITS: Record<AlertRule["type"], string> = {
-  price_above: "원",
-  price_below: "원",
-  return_above: "%",
-  return_below: "%",
+const GLOBAL_RULE_INFO: Record<GlobalAlertRule["type"], { label: string; description: string; icon: typeof ShieldAlert }> = {
+  cost_drop: {
+    label: "투자원금 대비 하락",
+    description: "평균 매수가 대비 현재가가 설정한 % 이하로 하락 시 알림",
+    icon: TrendingDown,
+  },
+  peak_drop: {
+    label: "고점 대비 하락",
+    description: "기간 내 최고가 대비 현재가가 설정한 % 이하로 하락 시 알림",
+    icon: AlertTriangle,
+  },
 };
 
 function computeHoldings() {
