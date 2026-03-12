@@ -3,14 +3,14 @@ import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
 import { investmentTrades, dailyPrices } from "@/data/mockData";
-import { TrendingUp, TrendingDown, BarChart3, Wallet, Bell, BellRing, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
+import { TrendingUp, TrendingDown, BarChart3, Wallet, Bell, BellRing, ChevronDown, ChevronUp, Plus, Trash2, ShieldAlert, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -24,27 +24,25 @@ function formatDate(d: string) {
   return d.replace(/-/g, ".");
 }
 
-interface AlertRule {
+/** 글로벌 알림 룰 - 모든 종목에 일괄 적용 */
+interface GlobalAlertRule {
   id: string;
-  ticker: string;
-  name: string;
-  type: "price_above" | "price_below" | "return_above" | "return_below";
-  value: number;
+  type: "cost_drop" | "peak_drop";
+  percent: number;
   active: boolean;
 }
 
-const RULE_LABELS: Record<AlertRule["type"], string> = {
-  price_above: "현재가 ≥",
-  price_below: "현재가 ≤",
-  return_above: "수익률 ≥",
-  return_below: "수익률 ≤",
-};
-
-const RULE_UNITS: Record<AlertRule["type"], string> = {
-  price_above: "원",
-  price_below: "원",
-  return_above: "%",
-  return_below: "%",
+const GLOBAL_RULE_INFO: Record<GlobalAlertRule["type"], { label: string; description: string; icon: typeof ShieldAlert }> = {
+  cost_drop: {
+    label: "투자원금 대비 하락",
+    description: "평균 매수가 대비 현재가가 설정한 % 이하로 하락 시 알림",
+    icon: TrendingDown,
+  },
+  peak_drop: {
+    label: "고점 대비 하락",
+    description: "기간 내 최고가 대비 현재가가 설정한 % 이하로 하락 시 알림",
+    icon: AlertTriangle,
+  },
 };
 
 function computeHoldings() {
@@ -127,22 +125,19 @@ function StockDailyChart({ ticker, name, avgPrice }: { ticker: string; name: str
   );
 }
 
-// 기본 알림 룰 (데모)
-const DEFAULT_ALERTS: AlertRule[] = [
-  { id: "a1", ticker: "005930", name: "삼성전자", type: "price_above", value: 65000, active: true },
-  { id: "a2", ticker: "035720", name: "카카오", type: "price_below", value: 45000, active: true },
-  { id: "a3", ticker: "360750", name: "TIGER 미국S&P500", type: "return_above", value: 15, active: false },
+const DEFAULT_GLOBAL_RULES: GlobalAlertRule[] = [
+  { id: "g1", type: "cost_drop", percent: 10, active: true },
+  { id: "g2", type: "peak_drop", percent: 15, active: true },
 ];
 
 export default function Investments() {
   const [tab, setTab] = useState("portfolio");
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<AlertRule[]>(DEFAULT_ALERTS);
+  const [globalRules, setGlobalRules] = useState<GlobalAlertRule[]>(DEFAULT_GLOBAL_RULES);
 
-  // 알림 추가 폼 상태
-  const [newAlertTicker, setNewAlertTicker] = useState("");
-  const [newAlertType, setNewAlertType] = useState<AlertRule["type"]>("price_above");
-  const [newAlertValue, setNewAlertValue] = useState("");
+  // 새 룰 추가 폼
+  const [newRuleType, setNewRuleType] = useState<GlobalAlertRule["type"]>("cost_drop");
+  const [newRulePercent, setNewRulePercent] = useState("");
 
   const holdings = useMemo(() => computeHoldings(), []);
   const totalValue = holdings.reduce((s, h) => s + h.currentValue, 0);
@@ -164,78 +159,100 @@ export default function Investments() {
     });
   }, [holdings, totalCost]);
 
-  // 알림 트리거 체크
-  const triggeredAlerts = useMemo(() => {
-    return alerts.filter((a) => {
-      if (!a.active) return false;
-      const h = holdings.find((h) => h.ticker === a.ticker);
-      if (!h) return false;
-      switch (a.type) {
-        case "price_above": return h.currentPrice >= a.value;
-        case "price_below": return h.currentPrice <= a.value;
-        case "return_above": return h.returnRate >= a.value;
-        case "return_below": return h.returnRate <= a.value;
+  // 종목별 고점 계산
+  const peakPrices = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of holdings) {
+      const prices = dailyPrices.filter((p) => p.ticker === h.ticker);
+      const peak = prices.length > 0 ? Math.max(...prices.map((p) => p.close)) : h.currentPrice;
+      map.set(h.ticker, peak);
+    }
+    return map;
+  }, [holdings]);
+
+  // 글로벌 룰 트리거 체크 - 어떤 종목이 어떤 룰에 걸리는지
+  const triggeredItems = useMemo(() => {
+    const results: { rule: GlobalAlertRule; ticker: string; name: string; currentPrice: number; threshold: number; actual: number }[] = [];
+    for (const rule of globalRules) {
+      if (!rule.active) continue;
+      for (const h of holdings) {
+        if (rule.type === "cost_drop") {
+          const dropPercent = ((h.avgPrice - h.currentPrice) / h.avgPrice) * 100;
+          if (dropPercent >= rule.percent) {
+            results.push({ rule, ticker: h.ticker, name: h.name, currentPrice: h.currentPrice, threshold: rule.percent, actual: dropPercent });
+          }
+        } else if (rule.type === "peak_drop") {
+          const peak = peakPrices.get(h.ticker) || h.currentPrice;
+          const dropPercent = ((peak - h.currentPrice) / peak) * 100;
+          if (dropPercent >= rule.percent) {
+            results.push({ rule, ticker: h.ticker, name: h.name, currentPrice: h.currentPrice, threshold: rule.percent, actual: dropPercent });
+          }
+        }
       }
-    });
-  }, [alerts, holdings]);
+    }
+    return results;
+  }, [globalRules, holdings, peakPrices]);
 
   function handleToggleExpand(ticker: string) {
     setExpandedTicker((prev) => (prev === ticker ? null : ticker));
   }
 
-  function handleAddAlert() {
-    if (!newAlertTicker || !newAlertValue) {
-      toast.error("종목과 값을 입력해주세요");
+  function handleAddRule() {
+    if (!newRulePercent || Number(newRulePercent) <= 0) {
+      toast.error("유효한 %값을 입력해주세요");
       return;
     }
-    const h = holdings.find((h) => h.ticker === newAlertTicker);
-    if (!h) return;
-    const rule: AlertRule = {
-      id: `a${Date.now()}`,
-      ticker: newAlertTicker,
-      name: h.name,
-      type: newAlertType,
-      value: Number(newAlertValue),
+    // 중복 체크
+    const exists = globalRules.some((r) => r.type === newRuleType && r.percent === Number(newRulePercent));
+    if (exists) {
+      toast.error("동일한 조건의 룰이 이미 존재합니다");
+      return;
+    }
+    const rule: GlobalAlertRule = {
+      id: `g${Date.now()}`,
+      type: newRuleType,
+      percent: Number(newRulePercent),
       active: true,
     };
-    setAlerts((prev) => [...prev, rule]);
-    setNewAlertTicker("");
-    setNewAlertValue("");
-    toast.success(`${h.name} 알림 룰이 추가되었습니다`);
+    setGlobalRules((prev) => [...prev, rule]);
+    setNewRulePercent("");
+    toast.success("알림 룰이 추가되었습니다");
   }
 
-  function handleDeleteAlert(id: string) {
-    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  function handleDeleteRule(id: string) {
+    setGlobalRules((prev) => prev.filter((r) => r.id !== id));
   }
 
-  function handleToggleAlert(id: string) {
-    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a)));
+  function handleToggleRule(id: string) {
+    setGlobalRules((prev) => prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
   }
 
   return (
     <AppLayout title="투자 관리">
       <div className="space-y-6 max-w-5xl">
         {/* 트리거된 알림 배너 */}
-        {triggeredAlerts.length > 0 && (
-          <Card className="border-primary/50 bg-primary/5 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <BellRing className="h-4 w-4 text-primary animate-pulse" />
-              <span className="text-sm font-semibold text-primary">알림 트리거!</span>
+        {triggeredItems.length > 0 && (
+          <Card className="border-destructive/50 bg-destructive/5 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BellRing className="h-4 w-4 text-destructive animate-pulse" />
+              <span className="text-sm font-semibold text-destructive">매도 알림 트리거!</span>
+              <Badge variant="destructive" className="text-[10px]">{triggeredItems.length}건</Badge>
             </div>
-            <div className="space-y-1">
-              {triggeredAlerts.map((a) => {
-                const h = holdings.find((h) => h.ticker === a.ticker);
-                return (
-                  <p key={a.id} className="text-xs text-foreground">
-                    <span className="font-medium">{a.name}</span>: {RULE_LABELS[a.type]} {a.value.toLocaleString()}{RULE_UNITS[a.type]}
-                    {h && (
-                      <span className="text-muted-foreground ml-1">
-                        (현재: {a.type.includes("price") ? formatKRW(h.currentPrice) : `${h.returnRate.toFixed(2)}%`})
-                      </span>
-                    )}
-                  </p>
-                );
-              })}
+            <div className="space-y-2">
+              {triggeredItems.map((item, i) => (
+                <div key={i} className="flex items-center justify-between text-xs bg-background/50 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                    <span className="font-medium">{item.name}</span>
+                    <span className="text-muted-foreground">
+                      {GLOBAL_RULE_INFO[item.rule.type].label} {item.rule.percent}% 룰
+                    </span>
+                  </div>
+                  <div className="font-mono text-expense font-semibold">
+                    -{item.actual.toFixed(1)}% ({formatKRW(item.currentPrice)})
+                  </div>
+                </div>
+              ))}
             </div>
           </Card>
         )}
@@ -291,9 +308,9 @@ export default function Investments() {
             <TabsTrigger value="alerts" className="gap-1.5">
               <Bell className="h-3.5 w-3.5" />
               알림 설정
-              {triggeredAlerts.length > 0 && (
+              {triggeredItems.length > 0 && (
                 <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
-                  {triggeredAlerts.length}
+                  {triggeredItems.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -404,119 +421,100 @@ export default function Investments() {
             </Card>
           </TabsContent>
 
-          {/* 알림 설정 */}
+          {/* 알림 설정 - 글로벌 룰 */}
           <TabsContent value="alerts">
             <div className="space-y-4">
-              {/* 알림 추가 */}
+              {/* 설명 */}
               <Card className="glass-card p-5">
-                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                  <Plus className="h-4 w-4" /> 새 알림 룰 추가
-                </h3>
-                <div className="flex flex-wrap gap-3 items-end">
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground">종목</label>
-                    <Select value={newAlertTicker} onValueChange={setNewAlertTicker}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="종목 선택" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {holdings.map((h) => (
-                          <SelectItem key={h.ticker} value={h.ticker}>{h.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="flex items-start gap-3 mb-5">
+                  <div className="h-9 w-9 rounded-lg bg-accent flex items-center justify-center flex-shrink-0">
+                    <ShieldAlert className="h-4.5 w-4.5 text-accent-foreground" />
                   </div>
+                  <div>
+                    <h3 className="text-sm font-semibold">글로벌 매도 알림 룰</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      설정한 룰은 <span className="font-medium text-foreground">모든 보유 종목</span>에 일괄 적용됩니다. 조건이 충족되면 해당 종목에 알림이 표시됩니다.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 룰 추가 폼 */}
+                <div className="flex flex-wrap gap-3 items-end border-t border-border pt-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground">조건</label>
-                    <Select value={newAlertType} onValueChange={(v) => setNewAlertType(v as AlertRule["type"])}>
-                      <SelectTrigger className="w-36">
+                    <label className="text-xs text-muted-foreground">조건 유형</label>
+                    <Select value={newRuleType} onValueChange={(v) => setNewRuleType(v as GlobalAlertRule["type"])}>
+                      <SelectTrigger className="w-48">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="price_above">현재가 이상</SelectItem>
-                        <SelectItem value="price_below">현재가 이하</SelectItem>
-                        <SelectItem value="return_above">수익률 이상</SelectItem>
-                        <SelectItem value="return_below">수익률 이하</SelectItem>
+                        <SelectItem value="cost_drop">투자원금 대비 하락</SelectItem>
+                        <SelectItem value="peak_drop">고점 대비 하락</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground">
-                      값 ({newAlertType.includes("price") ? "원" : "%"})
-                    </label>
+                    <label className="text-xs text-muted-foreground">하락 기준 (%)</label>
                     <Input
                       type="number"
-                      className="w-32"
-                      placeholder={newAlertType.includes("price") ? "65000" : "15"}
-                      value={newAlertValue}
-                      onChange={(e) => setNewAlertValue(e.target.value)}
+                      className="w-28"
+                      placeholder="10"
+                      value={newRulePercent}
+                      onChange={(e) => setNewRulePercent(e.target.value)}
                     />
                   </div>
-                  <Button onClick={handleAddAlert} size="sm">
-                    추가
+                  <Button onClick={handleAddRule} size="sm">
+                    <Plus className="h-3.5 w-3.5 mr-1" /> 룰 추가
                   </Button>
                 </div>
               </Card>
 
-              {/* 알림 목록 */}
+              {/* 등록된 룰 목록 */}
               <Card className="glass-card">
                 <div className="p-5 pb-3">
-                  <h3 className="text-sm font-semibold">등록된 알림 룰</h3>
+                  <h3 className="text-sm font-semibold">등록된 룰</h3>
                 </div>
-                {alerts.length === 0 ? (
-                  <div className="px-5 pb-5 text-sm text-muted-foreground">등록된 알림이 없습니다.</div>
+                {globalRules.length === 0 ? (
+                  <div className="px-5 pb-5 text-sm text-muted-foreground">등록된 룰이 없습니다.</div>
                 ) : (
                   <div className="divide-y divide-border">
-                    {alerts.map((a) => {
-                      const h = holdings.find((h) => h.ticker === a.ticker);
-                      const isTriggered = triggeredAlerts.some((t) => t.id === a.id);
+                    {globalRules.map((rule) => {
+                      const info = GLOBAL_RULE_INFO[rule.type];
+                      const Icon = info.icon;
+                      const matchCount = triggeredItems.filter((t) => t.rule.id === rule.id).length;
                       return (
-                        <div key={a.id} className={cn("px-5 py-3 flex items-center justify-between", isTriggered && "bg-primary/5")}>
+                        <div key={rule.id} className={cn("px-5 py-4 flex items-center justify-between", matchCount > 0 && "bg-destructive/5")}>
                           <div className="flex items-center gap-3">
                             <div className={cn(
-                              "h-8 w-8 rounded-lg flex items-center justify-center",
-                              isTriggered ? "bg-primary/10" : "bg-muted"
+                              "h-9 w-9 rounded-lg flex items-center justify-center",
+                              matchCount > 0 ? "bg-destructive/10" : "bg-muted"
                             )}>
-                              {isTriggered ? (
-                                <BellRing className="h-4 w-4 text-primary" />
-                              ) : (
-                                <Bell className="h-4 w-4 text-muted-foreground" />
-                              )}
+                              <Icon className={cn("h-4 w-4", matchCount > 0 ? "text-destructive" : "text-muted-foreground")} />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium">{a.name}</p>
-                                {isTriggered && (
-                                  <Badge variant="default" className="text-[10px] h-4 px-1.5">트리거됨</Badge>
-                                )}
-                                {!a.active && (
-                                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-muted-foreground">비활성</Badge>
+                                <p className="text-sm font-medium">{info.label}</p>
+                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-mono">
+                                  -{rule.percent}%
+                                </Badge>
+                                {matchCount > 0 && (
+                                  <Badge variant="destructive" className="text-[10px] h-5 px-1.5">
+                                    {matchCount}종목 트리거
+                                  </Badge>
                                 )}
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                {RULE_LABELS[a.type]} {a.value.toLocaleString()}{RULE_UNITS[a.type]}
-                                {h && (
-                                  <span className="ml-1">
-                                    (현재: {a.type.includes("price") ? formatKRW(h.currentPrice) : `${h.returnRate.toFixed(2)}%`})
-                                  </span>
-                                )}
-                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{info.description}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-xs"
-                              onClick={() => handleToggleAlert(a.id)}
-                            >
-                              {a.active ? "비활성" : "활성"}
-                            </Button>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={rule.active}
+                              onCheckedChange={() => handleToggleRule(rule.id)}
+                            />
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleDeleteAlert(a.id)}
+                              onClick={() => handleDeleteRule(rule.id)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
