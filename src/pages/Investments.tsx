@@ -2,12 +2,18 @@ import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { investmentTrades, dailyPrices, stockInfos } from "@/data/mockData";
-import { TrendingUp, TrendingDown, BarChart3, Wallet, Calendar } from "lucide-react";
+import { investmentTrades, dailyPrices } from "@/data/mockData";
+import { TrendingUp, TrendingDown, BarChart3, Wallet, Bell, BellRing, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 
 function formatKRW(value: number) {
@@ -18,7 +24,29 @@ function formatDate(d: string) {
   return d.replace(/-/g, ".");
 }
 
-/** 거래 기록에서 종목별 보유 현황 계산 */
+interface AlertRule {
+  id: string;
+  ticker: string;
+  name: string;
+  type: "price_above" | "price_below" | "return_above" | "return_below";
+  value: number;
+  active: boolean;
+}
+
+const RULE_LABELS: Record<AlertRule["type"], string> = {
+  price_above: "현재가 ≥",
+  price_below: "현재가 ≤",
+  return_above: "수익률 ≥",
+  return_below: "수익률 ≤",
+};
+
+const RULE_UNITS: Record<AlertRule["type"], string> = {
+  price_above: "원",
+  price_below: "원",
+  return_above: "%",
+  return_below: "%",
+};
+
 function computeHoldings() {
   const map = new Map<string, { shares: number; totalCost: number; name: string; type: "stock" | "etf" }>();
 
@@ -29,7 +57,6 @@ function computeHoldings() {
       cur.shares += t.shares;
     } else {
       cur.shares -= t.shares;
-      // 매도 시 비례 원가 차감
       const avgCost = cur.totalCost / (cur.shares + t.shares);
       cur.totalCost -= avgCost * t.shares;
     }
@@ -52,8 +79,70 @@ function getLatestPrice(ticker: string) {
   return prices.length > 0 ? prices[prices.length - 1].close : 0;
 }
 
+function StockDailyChart({ ticker, name, avgPrice }: { ticker: string; name: string; avgPrice: number }) {
+  const data = useMemo(() => {
+    return dailyPrices
+      .filter((p) => p.ticker === ticker)
+      .map((p) => ({ date: p.date.slice(5), close: p.close }));
+  }, [ticker]);
+
+  const min = Math.min(...data.map((d) => d.close));
+  const max = Math.max(...data.map((d) => d.close));
+  const padding = Math.round((max - min) * 0.15);
+
+  return (
+    <div className="px-5 pb-4 pt-2">
+      <p className="text-xs text-muted-foreground mb-2">{name} 일별 시세 (최근 30일)</p>
+      <div className="h-44">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+            <YAxis
+              domain={[min - padding, max + padding]}
+              tick={{ fontSize: 10 }}
+              stroke="hsl(var(--muted-foreground))"
+              tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "8px",
+                fontSize: "12px",
+              }}
+              formatter={(value: number) => [formatKRW(value), "종가"]}
+            />
+            <ReferenceLine
+              y={avgPrice}
+              stroke="hsl(var(--muted-foreground))"
+              strokeDasharray="4 4"
+              label={{ value: `평단 ${formatKRW(avgPrice)}`, position: "right", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
+            <Line type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// 기본 알림 룰 (데모)
+const DEFAULT_ALERTS: AlertRule[] = [
+  { id: "a1", ticker: "005930", name: "삼성전자", type: "price_above", value: 65000, active: true },
+  { id: "a2", ticker: "035720", name: "카카오", type: "price_below", value: 45000, active: true },
+  { id: "a3", ticker: "360750", name: "TIGER 미국S&P500", type: "return_above", value: 15, active: false },
+];
+
 export default function Investments() {
   const [tab, setTab] = useState("portfolio");
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<AlertRule[]>(DEFAULT_ALERTS);
+
+  // 알림 추가 폼 상태
+  const [newAlertTicker, setNewAlertTicker] = useState("");
+  const [newAlertType, setNewAlertType] = useState<AlertRule["type"]>("price_above");
+  const [newAlertValue, setNewAlertValue] = useState("");
 
   const holdings = useMemo(() => computeHoldings(), []);
   const totalValue = holdings.reduce((s, h) => s + h.currentValue, 0);
@@ -61,11 +150,9 @@ export default function Investments() {
   const totalReturn = totalValue - totalCost;
   const returnRate = totalCost > 0 ? ((totalReturn / totalCost) * 100).toFixed(2) : "0";
 
-  // 일별 포트폴리오 가치 추적
   const dailyPortfolio = useMemo(() => {
     const dateSet = new Set(dailyPrices.map((p) => p.date));
     const dates = Array.from(dateSet).sort();
-
     return dates.map((date) => {
       let value = 0;
       for (const h of holdings) {
@@ -77,9 +164,82 @@ export default function Investments() {
     });
   }, [holdings, totalCost]);
 
+  // 알림 트리거 체크
+  const triggeredAlerts = useMemo(() => {
+    return alerts.filter((a) => {
+      if (!a.active) return false;
+      const h = holdings.find((h) => h.ticker === a.ticker);
+      if (!h) return false;
+      switch (a.type) {
+        case "price_above": return h.currentPrice >= a.value;
+        case "price_below": return h.currentPrice <= a.value;
+        case "return_above": return h.returnRate >= a.value;
+        case "return_below": return h.returnRate <= a.value;
+      }
+    });
+  }, [alerts, holdings]);
+
+  function handleToggleExpand(ticker: string) {
+    setExpandedTicker((prev) => (prev === ticker ? null : ticker));
+  }
+
+  function handleAddAlert() {
+    if (!newAlertTicker || !newAlertValue) {
+      toast.error("종목과 값을 입력해주세요");
+      return;
+    }
+    const h = holdings.find((h) => h.ticker === newAlertTicker);
+    if (!h) return;
+    const rule: AlertRule = {
+      id: `a${Date.now()}`,
+      ticker: newAlertTicker,
+      name: h.name,
+      type: newAlertType,
+      value: Number(newAlertValue),
+      active: true,
+    };
+    setAlerts((prev) => [...prev, rule]);
+    setNewAlertTicker("");
+    setNewAlertValue("");
+    toast.success(`${h.name} 알림 룰이 추가되었습니다`);
+  }
+
+  function handleDeleteAlert(id: string) {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function handleToggleAlert(id: string) {
+    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a)));
+  }
+
   return (
     <AppLayout title="투자 관리">
       <div className="space-y-6 max-w-5xl">
+        {/* 트리거된 알림 배너 */}
+        {triggeredAlerts.length > 0 && (
+          <Card className="border-primary/50 bg-primary/5 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <BellRing className="h-4 w-4 text-primary animate-pulse" />
+              <span className="text-sm font-semibold text-primary">알림 트리거!</span>
+            </div>
+            <div className="space-y-1">
+              {triggeredAlerts.map((a) => {
+                const h = holdings.find((h) => h.ticker === a.ticker);
+                return (
+                  <p key={a.id} className="text-xs text-foreground">
+                    <span className="font-medium">{a.name}</span>: {RULE_LABELS[a.type]} {a.value.toLocaleString()}{RULE_UNITS[a.type]}
+                    {h && (
+                      <span className="text-muted-foreground ml-1">
+                        (현재: {a.type.includes("price") ? formatKRW(h.currentPrice) : `${h.returnRate.toFixed(2)}%`})
+                      </span>
+                    )}
+                  </p>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         {/* 요약 */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard label="투자 평가액" value={formatKRW(totalValue)} icon={Wallet} iconClassName="bg-accent" />
@@ -123,13 +283,23 @@ export default function Investments() {
           </div>
         </Card>
 
-        {/* 탭: 포트폴리오 / 매매 내역 */}
+        {/* 탭: 포트폴리오 / 매매 내역 / 알림 설정 */}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="portfolio">보유 종목</TabsTrigger>
             <TabsTrigger value="trades">매매 내역</TabsTrigger>
+            <TabsTrigger value="alerts" className="gap-1.5">
+              <Bell className="h-3.5 w-3.5" />
+              알림 설정
+              {triggeredAlerts.length > 0 && (
+                <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {triggeredAlerts.length}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
+          {/* 보유 종목 + 클릭 시 일별 차트 */}
           <TabsContent value="portfolio">
             <Card className="glass-card">
               <div className="overflow-x-auto">
@@ -142,25 +312,46 @@ export default function Investments() {
                       <th className="text-right px-5 py-2.5 font-medium">현재가</th>
                       <th className="text-right px-5 py-2.5 font-medium">평가액</th>
                       <th className="text-right px-5 py-2.5 font-medium">수익률</th>
+                      <th className="w-10"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody>
                     {holdings.map((h) => {
                       const positive = h.returnRate >= 0;
+                      const isExpanded = expandedTicker === h.ticker;
                       return (
-                        <tr key={h.ticker} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-5 py-3">
-                            <p className="font-medium">{h.name}</p>
-                            <p className="text-xs text-muted-foreground">{h.ticker} · {h.type.toUpperCase()}</p>
-                          </td>
-                          <td className="px-5 py-3 text-right font-mono">{h.shares}</td>
-                          <td className="px-5 py-3 text-right font-mono">{formatKRW(h.avgPrice)}</td>
-                          <td className="px-5 py-3 text-right font-mono">{formatKRW(h.currentPrice)}</td>
-                          <td className="px-5 py-3 text-right font-mono font-semibold">{formatKRW(h.currentValue)}</td>
-                          <td className={cn("px-5 py-3 text-right font-mono font-semibold", positive ? "text-success" : "text-expense")}>
-                            {positive ? "+" : ""}{h.returnRate.toFixed(2)}%
-                          </td>
-                        </tr>
+                        <>
+                          <tr
+                            key={h.ticker}
+                            className={cn(
+                              "hover:bg-muted/30 transition-colors cursor-pointer border-b border-border",
+                              isExpanded && "bg-muted/20"
+                            )}
+                            onClick={() => handleToggleExpand(h.ticker)}
+                          >
+                            <td className="px-5 py-3">
+                              <p className="font-medium">{h.name}</p>
+                              <p className="text-xs text-muted-foreground">{h.ticker} · {h.type.toUpperCase()}</p>
+                            </td>
+                            <td className="px-5 py-3 text-right font-mono">{h.shares}</td>
+                            <td className="px-5 py-3 text-right font-mono">{formatKRW(h.avgPrice)}</td>
+                            <td className="px-5 py-3 text-right font-mono">{formatKRW(h.currentPrice)}</td>
+                            <td className="px-5 py-3 text-right font-mono font-semibold">{formatKRW(h.currentValue)}</td>
+                            <td className={cn("px-5 py-3 text-right font-mono font-semibold", positive ? "text-success" : "text-expense")}>
+                              {positive ? "+" : ""}{h.returnRate.toFixed(2)}%
+                            </td>
+                            <td className="px-2 py-3 text-muted-foreground">
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr key={`${h.ticker}-chart`}>
+                              <td colSpan={7} className="bg-muted/10 border-b border-border">
+                                <StockDailyChart ticker={h.ticker} name={h.name} avgPrice={h.avgPrice} />
+                              </td>
+                            </tr>
+                          )}
+                        </>
                       );
                     })}
                   </tbody>
@@ -169,6 +360,7 @@ export default function Investments() {
             </Card>
           </TabsContent>
 
+          {/* 매매 내역 */}
           <TabsContent value="trades">
             <Card className="glass-card">
               <div className="overflow-x-auto">
@@ -210,6 +402,132 @@ export default function Investments() {
                 </table>
               </div>
             </Card>
+          </TabsContent>
+
+          {/* 알림 설정 */}
+          <TabsContent value="alerts">
+            <div className="space-y-4">
+              {/* 알림 추가 */}
+              <Card className="glass-card p-5">
+                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                  <Plus className="h-4 w-4" /> 새 알림 룰 추가
+                </h3>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">종목</label>
+                    <Select value={newAlertTicker} onValueChange={setNewAlertTicker}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="종목 선택" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {holdings.map((h) => (
+                          <SelectItem key={h.ticker} value={h.ticker}>{h.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">조건</label>
+                    <Select value={newAlertType} onValueChange={(v) => setNewAlertType(v as AlertRule["type"])}>
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="price_above">현재가 이상</SelectItem>
+                        <SelectItem value="price_below">현재가 이하</SelectItem>
+                        <SelectItem value="return_above">수익률 이상</SelectItem>
+                        <SelectItem value="return_below">수익률 이하</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">
+                      값 ({newAlertType.includes("price") ? "원" : "%"})
+                    </label>
+                    <Input
+                      type="number"
+                      className="w-32"
+                      placeholder={newAlertType.includes("price") ? "65000" : "15"}
+                      value={newAlertValue}
+                      onChange={(e) => setNewAlertValue(e.target.value)}
+                    />
+                  </div>
+                  <Button onClick={handleAddAlert} size="sm">
+                    추가
+                  </Button>
+                </div>
+              </Card>
+
+              {/* 알림 목록 */}
+              <Card className="glass-card">
+                <div className="p-5 pb-3">
+                  <h3 className="text-sm font-semibold">등록된 알림 룰</h3>
+                </div>
+                {alerts.length === 0 ? (
+                  <div className="px-5 pb-5 text-sm text-muted-foreground">등록된 알림이 없습니다.</div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {alerts.map((a) => {
+                      const h = holdings.find((h) => h.ticker === a.ticker);
+                      const isTriggered = triggeredAlerts.some((t) => t.id === a.id);
+                      return (
+                        <div key={a.id} className={cn("px-5 py-3 flex items-center justify-between", isTriggered && "bg-primary/5")}>
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "h-8 w-8 rounded-lg flex items-center justify-center",
+                              isTriggered ? "bg-primary/10" : "bg-muted"
+                            )}>
+                              {isTriggered ? (
+                                <BellRing className="h-4 w-4 text-primary" />
+                              ) : (
+                                <Bell className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">{a.name}</p>
+                                {isTriggered && (
+                                  <Badge variant="default" className="text-[10px] h-4 px-1.5">트리거됨</Badge>
+                                )}
+                                {!a.active && (
+                                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 text-muted-foreground">비활성</Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {RULE_LABELS[a.type]} {a.value.toLocaleString()}{RULE_UNITS[a.type]}
+                                {h && (
+                                  <span className="ml-1">
+                                    (현재: {a.type.includes("price") ? formatKRW(h.currentPrice) : `${h.returnRate.toFixed(2)}%`})
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs"
+                              onClick={() => handleToggleAlert(a.id)}
+                            >
+                              {a.active ? "비활성" : "활성"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDeleteAlert(a.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
