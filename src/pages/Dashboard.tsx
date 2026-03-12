@@ -9,14 +9,31 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 
-const totalAssets = accounts.reduce((sum, a) => sum + (a.balance > 0 ? a.balance : 0), 0) +
-  investments.reduce((sum, inv) => sum + inv.currentPrice * inv.shares, 0);
+// 거래 기록에서 보유 종목 계산
+function computeInvestmentTotal() {
+  const map = new Map<string, { shares: number; ticker: string }>();
+  for (const t of investmentTrades) {
+    const cur = map.get(t.ticker) || { shares: 0, ticker: t.ticker };
+    cur.shares += t.action === "buy" ? t.shares : -t.shares;
+    map.set(t.ticker, cur);
+  }
+  let total = 0;
+  for (const [ticker, v] of map) {
+    if (v.shares <= 0) continue;
+    const prices = dailyPrices.filter((p) => p.ticker === ticker);
+    const latest = prices.length > 0 ? prices[prices.length - 1].close : 0;
+    total += latest * v.shares;
+  }
+  return total;
+}
+
+const investmentTotal = computeInvestmentTotal();
+const totalAssets = accounts.reduce((sum, a) => sum + (a.balance > 0 ? a.balance : 0), 0) + investmentTotal;
 
 const totalLiabilities = accounts.reduce((sum, a) => sum + (a.balance < 0 ? Math.abs(a.balance) : 0), 0);
 const netWorth = totalAssets - totalLiabilities;
 
 const thisMonthExpense = 1470700;
-const investmentTotal = investments.reduce((sum, inv) => sum + inv.currentPrice * inv.shares, 0);
 
 function formatKRW(value: number) {
   if (Math.abs(value) >= 10000) {
