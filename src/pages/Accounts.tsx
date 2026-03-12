@@ -1,9 +1,18 @@
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
-import { accounts } from "@/data/mockData";
-import { Landmark, CreditCard, TrendingUp } from "lucide-react";
+import { accounts as initialAccounts, Account } from "@/data/mockData";
+import { Landmark, CreditCard, TrendingUp, Plus, Trash2, ArrowLeftRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInstitutionIcon } from "@/data/categoryIcons";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 const typeConfig = {
   bank: { label: "은행 계좌", icon: Landmark },
@@ -16,15 +25,102 @@ function formatKRW(value: number) {
 }
 
 export default function Accounts() {
+  const [accountList, setAccountList] = useState<Account[]>(initialAccounts);
+  const [addOpen, setAddOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
+
+  // Add form state
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState<Account["type"]>("bank");
+  const [newInstitution, setNewInstitution] = useState("");
+  const [newBalance, setNewBalance] = useState("");
+
+  // Transfer form state
+  const [fromId, setFromId] = useState("");
+  const [toId, setToId] = useState("");
+  const [transferAmount, setTransferAmount] = useState("");
+
   const grouped = {
-    bank: accounts.filter((a) => a.type === "bank"),
-    card: accounts.filter((a) => a.type === "card"),
-    investment: accounts.filter((a) => a.type === "investment"),
+    bank: accountList.filter((a) => a.type === "bank"),
+    card: accountList.filter((a) => a.type === "card"),
+    investment: accountList.filter((a) => a.type === "investment"),
   };
+
+  function handleAdd() {
+    if (!newName.trim() || !newInstitution.trim()) {
+      toast.error("계좌명과 금융기관을 입력해주세요");
+      return;
+    }
+    const account: Account = {
+      id: crypto.randomUUID(),
+      name: newName.trim(),
+      type: newType,
+      balance: Number(newBalance) || 0,
+      institution: newInstitution.trim(),
+      lastSync: new Date().toISOString().split("T")[0],
+    };
+    setAccountList((prev) => [...prev, account]);
+    setNewName("");
+    setNewType("bank");
+    setNewInstitution("");
+    setNewBalance("");
+    setAddOpen(false);
+    toast.success(`${account.name} 계좌가 추가되었습니다`);
+  }
+
+  function handleDelete() {
+    if (!deleteTarget) return;
+    setAccountList((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+    toast.success(`${deleteTarget.name} 계좌가 삭제되었습니다`);
+    setDeleteTarget(null);
+  }
+
+  function handleTransfer() {
+    const amount = Number(transferAmount);
+    if (!fromId || !toId || fromId === toId) {
+      toast.error("출금 계좌와 입금 계좌를 다르게 선택해주세요");
+      return;
+    }
+    if (!amount || amount <= 0) {
+      toast.error("유효한 금액을 입력해주세요");
+      return;
+    }
+    const fromAccount = accountList.find((a) => a.id === fromId);
+    if (fromAccount && fromAccount.balance < amount && fromAccount.type !== "card") {
+      toast.error("잔액이 부족합니다");
+      return;
+    }
+    setAccountList((prev) =>
+      prev.map((a) => {
+        if (a.id === fromId) return { ...a, balance: a.balance - amount };
+        if (a.id === toId) return { ...a, balance: a.balance + amount };
+        return a;
+      })
+    );
+    setTransferAmount("");
+    setFromId("");
+    setToId("");
+    setTransferOpen(false);
+    toast.success(`₩${amount.toLocaleString()} 이체 완료`);
+  }
 
   return (
     <AppLayout title="계좌 관리">
       <div className="space-y-6 max-w-3xl">
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            계좌 추가
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setTransferOpen(true)}>
+            <ArrowLeftRight className="h-4 w-4 mr-1.5" />
+            계좌 이체
+          </Button>
+        </div>
+
+        {/* Account Groups */}
         {(Object.keys(grouped) as Array<keyof typeof grouped>).map((type) => {
           const config = typeConfig[type];
           const items = grouped[type];
@@ -48,7 +144,7 @@ export default function Accounts() {
                   const instIcon = getInstitutionIcon(account.institution);
                   const Icon = instIcon.icon;
                   return (
-                    <Card key={account.id} className="p-4 glass-card flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer">
+                    <Card key={account.id} className="p-4 glass-card flex items-center justify-between hover:bg-muted/30 transition-colors group">
                       <div className="flex items-center gap-3">
                         <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", instIcon.color)}>
                           <Icon className={cn("h-5 w-5", instIcon.iconColor)} />
@@ -58,16 +154,26 @@ export default function Accounts() {
                           <p className="text-xs text-muted-foreground">{account.institution}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className={cn(
-                          "text-sm font-mono font-semibold",
-                          account.balance < 0 && "text-expense"
-                        )}>
-                          {account.balance < 0 ? "-" : ""}{formatKRW(account.balance)}
-                        </p>
-                        {account.lastSync && (
-                          <p className="text-[10px] text-muted-foreground">동기화: {account.lastSync}</p>
-                        )}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className={cn(
+                            "text-sm font-mono font-semibold",
+                            account.balance < 0 && "text-expense"
+                          )}>
+                            {account.balance < 0 ? "-" : ""}{formatKRW(account.balance)}
+                          </p>
+                          {account.lastSync && (
+                            <p className="text-[10px] text-muted-foreground">동기화: {account.lastSync}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleteTarget(account)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </Card>
                   );
@@ -76,7 +182,123 @@ export default function Accounts() {
             </div>
           );
         })}
+
+        {accountList.length === 0 && (
+          <div className="text-center py-16 text-muted-foreground text-sm">
+            등록된 계좌가 없습니다. 계좌를 추가해주세요.
+          </div>
+        )}
       </div>
+
+      {/* Add Account Dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>계좌 추가</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>계좌 유형</Label>
+              <Select value={newType} onValueChange={(v) => setNewType(v as Account["type"])}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank">은행 계좌</SelectItem>
+                  <SelectItem value="card">카드</SelectItem>
+                  <SelectItem value="investment">증권 계좌</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>계좌명</Label>
+              <Input placeholder="예: 국민은행 주거래" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>금융기관</Label>
+              <Input placeholder="예: KB국민은행" value={newInstitution} onChange={(e) => setNewInstitution(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>초기 잔액 (₩)</Label>
+              <Input type="number" placeholder="0" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">취소</Button>
+            </DialogClose>
+            <Button onClick={handleAdd}>추가</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>계좌 삭제</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            <span className="font-medium text-foreground">{deleteTarget?.name}</span> 계좌를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+          </p>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">취소</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={handleDelete}>삭제</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>계좌 이체</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>출금 계좌</Label>
+              <Select value={fromId} onValueChange={setFromId}>
+                <SelectTrigger><SelectValue placeholder="출금 계좌 선택" /></SelectTrigger>
+                <SelectContent>
+                  {accountList.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({formatKRW(a.balance)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>입금 계좌</Label>
+              <Select value={toId} onValueChange={setToId}>
+                <SelectTrigger><SelectValue placeholder="입금 계좌 선택" /></SelectTrigger>
+                <SelectContent>
+                  {accountList.filter((a) => a.id !== fromId).map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({formatKRW(a.balance)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>이체 금액 (₩)</Label>
+              <Input type="number" placeholder="0" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} />
+              {fromId && (
+                <p className="text-xs text-muted-foreground">
+                  출금 가능: {formatKRW(accountList.find((a) => a.id === fromId)?.balance ?? 0)}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">취소</Button>
+            </DialogClose>
+            <Button onClick={handleTransfer}>이체</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
