@@ -69,7 +69,7 @@ export default function Reports() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={categorySpending} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value">
+                  <Pie data={categorySpending} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value" isAnimationActive={false}>
                     {categorySpending.map((entry, i) => (
                       <Cell key={i} fill={entry.color} />
                     ))}
