@@ -231,15 +231,14 @@ export default function Accounts() {
                                 <div className="h-40">
                                   <ResponsiveContainer width="100%" height="100%">
                                     {(() => {
-                                      // 날짜순 정렬 후 누적 잔액 계산
                                       const sorted = [...txList].sort((a, b) => a.date.localeCompare(b.date));
                                       let running = account.balance - sorted.reduce((s, tx) => s + tx.amount, 0);
                                       const chartData = sorted.map((tx) => {
                                         running += tx.amount;
-                                        return { date: tx.date.slice(5), description: tx.description, amount: tx.amount, balance: running };
+                                        return { date: tx.date.slice(5), balance: running };
                                       });
                                       return (
-                                        <BarChart data={chartData}>
+                                        <LineChart data={chartData}>
                                           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                           <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                                           <YAxis
@@ -254,34 +253,17 @@ export default function Accounts() {
                                               borderRadius: "8px",
                                               fontSize: "12px",
                                             }}
-                                            formatter={(value: number, name: string) => {
-                                              if (name === "amount") return [`${value > 0 ? "+" : ""}₩${Math.abs(value).toLocaleString()}`, "거래액"];
-                                              return [`₩${value.toLocaleString()}`, "잔액"];
-                                            }}
-                                            labelFormatter={(label) => {
-                                              const item = chartData.find((d) => d.date === label);
-                                              return item ? item.description : label;
-                                            }}
+                                            formatter={(value: number) => [`₩${value.toLocaleString()}`, "잔액"]}
                                           />
-                                          <Bar
-                                            dataKey="amount"
-                                            name="amount"
+                                          <Line
+                                            type="monotone"
+                                            dataKey="balance"
+                                            stroke="hsl(var(--primary))"
+                                            strokeWidth={2}
+                                            dot={{ fill: "hsl(var(--primary))", r: 3 }}
                                             isAnimationActive={false}
-                                            radius={[4, 4, 0, 0]}
-                                            fill="hsl(var(--primary))"
-                                            // Color each bar based on positive/negative
-                                          >
-                                            {(() => {
-                                              const sorted2 = [...txList].sort((a, b) => a.date.localeCompare(b.date));
-                                              return sorted2.map((tx, i) => (
-                                                <Cell
-                                                  key={i}
-                                                  fill={tx.amount > 0 ? "hsl(var(--chart-income))" : "hsl(var(--chart-expense))"}
-                                                />
-                                              ));
-                                            })()}
-                                          </Bar>
-                                        </BarChart>
+                                          />
+                                        </LineChart>
                                       );
                                     })()}
                                   </ResponsiveContainer>
