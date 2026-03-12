@@ -229,41 +229,108 @@ export default function Accounts() {
                         </div>
                       </Card>
 
-                      {/* Expanded Transaction List */}
+                      {/* Expanded: Balance Flow Chart + Transaction List */}
                       {isExpanded && (
                         <Card className="rounded-t-none border-t-0 glass-card overflow-hidden">
                           {txList.length > 0 ? (
-                            <div className="divide-y divide-border">
-                              {txList.map((tx) => {
-                                const catIcon = getCategoryIcon(tx.category);
-                                const CatIcon = catIcon.icon;
-                                return (
-                                  <div key={tx.id} className="px-5 py-3 flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", catIcon.color)}>
-                                        <CatIcon className={cn("h-3.5 w-3.5", catIcon.iconColor)} />
+                            <div>
+                              {/* Balance Flow Chart */}
+                              <div className="px-5 pt-4 pb-2">
+                                <p className="text-xs text-muted-foreground mb-2">잔액 흐름</p>
+                                <div className="h-40">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    {(() => {
+                                      // 날짜순 정렬 후 누적 잔액 계산
+                                      const sorted = [...txList].sort((a, b) => a.date.localeCompare(b.date));
+                                      let running = account.balance - sorted.reduce((s, tx) => s + tx.amount, 0);
+                                      const chartData = sorted.map((tx) => {
+                                        running += tx.amount;
+                                        return { date: tx.date.slice(5), description: tx.description, amount: tx.amount, balance: running };
+                                      });
+                                      return (
+                                        <BarChart data={chartData}>
+                                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                          <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                                          <YAxis
+                                            tick={{ fontSize: 10 }}
+                                            stroke="hsl(var(--muted-foreground))"
+                                            tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
+                                          />
+                                          <Tooltip
+                                            contentStyle={{
+                                              backgroundColor: "hsl(var(--card))",
+                                              border: "1px solid hsl(var(--border))",
+                                              borderRadius: "8px",
+                                              fontSize: "12px",
+                                            }}
+                                            formatter={(value: number, name: string) => {
+                                              if (name === "amount") return [`${value > 0 ? "+" : ""}₩${Math.abs(value).toLocaleString()}`, "거래액"];
+                                              return [`₩${value.toLocaleString()}`, "잔액"];
+                                            }}
+                                            labelFormatter={(label) => {
+                                              const item = chartData.find((d) => d.date === label);
+                                              return item ? item.description : label;
+                                            }}
+                                          />
+                                          <Bar
+                                            dataKey="amount"
+                                            name="amount"
+                                            isAnimationActive={false}
+                                            radius={[4, 4, 0, 0]}
+                                            fill="hsl(var(--primary))"
+                                            // Color each bar based on positive/negative
+                                          >
+                                            {(() => {
+                                              const sorted2 = [...txList].sort((a, b) => a.date.localeCompare(b.date));
+                                              const { Cell } = require("recharts");
+                                              return sorted2.map((tx, i) => (
+                                                <Cell
+                                                  key={i}
+                                                  fill={tx.amount > 0 ? "hsl(var(--chart-income))" : "hsl(var(--chart-expense))"}
+                                                />
+                                              ));
+                                            })()}
+                                          </Bar>
+                                        </BarChart>
+                                      );
+                                    })()}
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
+
+                              {/* Transaction List */}
+                              <div className="divide-y divide-border">
+                                {txList.map((tx) => {
+                                  const catIcon = getCategoryIcon(tx.category);
+                                  const CatIcon = catIcon.icon;
+                                  return (
+                                    <div key={tx.id} className="px-5 py-3 flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", catIcon.color)}>
+                                          <CatIcon className={cn("h-3.5 w-3.5", catIcon.iconColor)} />
+                                        </div>
+                                        <div>
+                                          <p className="text-xs font-medium">{tx.description}</p>
+                                          <p className="text-[10px] text-muted-foreground">{tx.date} · {tx.category}</p>
+                                        </div>
                                       </div>
-                                      <div>
-                                        <p className="text-xs font-medium">{tx.description}</p>
-                                        <p className="text-[10px] text-muted-foreground">{tx.date} · {tx.category}</p>
+                                      <div className="flex items-center gap-1.5">
+                                        {tx.amount > 0 ? (
+                                          <ArrowUpRight className="h-3 w-3 text-income" />
+                                        ) : (
+                                          <ArrowDownRight className="h-3 w-3 text-expense" />
+                                        )}
+                                        <span className={cn(
+                                          "text-xs font-mono font-semibold",
+                                          tx.amount > 0 ? "text-income" : "text-foreground"
+                                        )}>
+                                          {tx.amount > 0 ? "+" : "-"}{formatKRW(tx.amount)}
+                                        </span>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                      {tx.amount > 0 ? (
-                                        <ArrowUpRight className="h-3 w-3 text-income" />
-                                      ) : (
-                                        <ArrowDownRight className="h-3 w-3 text-expense" />
-                                      )}
-                                      <span className={cn(
-                                        "text-xs font-mono font-semibold",
-                                        tx.amount > 0 ? "text-income" : "text-foreground"
-                                      )}>
-                                        {tx.amount > 0 ? "+" : "-"}{formatKRW(tx.amount)}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                                  );
+                                })}
+                              </div>
                             </div>
                           ) : (
                             <div className="p-6 text-center text-xs text-muted-foreground">
