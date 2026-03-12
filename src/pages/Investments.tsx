@@ -308,9 +308,9 @@ export default function Investments() {
             <TabsTrigger value="alerts" className="gap-1.5">
               <Bell className="h-3.5 w-3.5" />
               알림 설정
-              {triggeredAlerts.length > 0 && (
+              {triggeredItems.length > 0 && (
                 <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
-                  {triggeredAlerts.length}
+                  {triggeredItems.length}
                 </Badge>
               )}
             </TabsTrigger>
