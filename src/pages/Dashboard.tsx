@@ -2,7 +2,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { StatCard } from "@/components/StatCard";
 import { Card } from "@/components/ui/card";
 import { Wallet, TrendingDown, TrendingUp, PiggyBank, ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { transactions, monthlySpending, categorySpending, accounts, investments } from "@/data/mockData";
+import { transactions, monthlySpending, categorySpending, accounts, investmentTrades, dailyPrices } from "@/data/mockData";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
