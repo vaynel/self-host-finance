@@ -273,7 +273,6 @@ export default function Accounts() {
                                           >
                                             {(() => {
                                               const sorted2 = [...txList].sort((a, b) => a.date.localeCompare(b.date));
-                                              const { Cell } = require("recharts");
                                               return sorted2.map((tx, i) => (
                                                 <Cell
                                                   key={i}
