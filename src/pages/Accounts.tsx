@@ -3,8 +3,19 @@ import { Card } from "@/components/ui/card";
 import { accounts as initialAccounts, Account, transactions } from "@/data/mockData";
 import { Landmark, TrendingUp, Plus, Trash2, ArrowLeftRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getInstitutionIcon } from "@/data/categoryIcons";
-import { getCategoryIcon } from "@/data/categoryIcons";
+import { getInstitutionIcon, getCategoryIcon } from "@/data/categoryIcons";
+import { useState, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+} from "recharts";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
