@@ -18,13 +18,27 @@ export interface Account {
   lastSync?: string;
 }
 
-export interface Investment {
+export interface InvestmentTrade {
   id: string;
-  name: string;
   ticker: string;
+  name: string;
+  type: "stock" | "etf";
+  action: "buy" | "sell";
+  date: string;
   shares: number;
-  avgPrice: number;
-  currentPrice: number;
+  price: number;
+  fee?: number;
+}
+
+export interface DailyPrice {
+  ticker: string;
+  date: string;
+  close: number;
+}
+
+export interface StockInfo {
+  ticker: string;
+  name: string;
   type: "stock" | "etf";
 }
 
@@ -51,13 +65,58 @@ export const accounts: Account[] = [
   { id: "5", name: "키움증권", type: "investment", balance: 15800000, institution: "키움증권", lastSync: "2026-03-11" },
 ];
 
-export const investments: Investment[] = [
-  { id: "1", name: "삼성전자", ticker: "005930", shares: 50, avgPrice: 58000, currentPrice: 62000, type: "stock" },
-  { id: "2", name: "KODEX 200", ticker: "069500", shares: 30, avgPrice: 35000, currentPrice: 37500, type: "etf" },
-  { id: "3", name: "카카오", ticker: "035720", shares: 20, avgPrice: 52000, currentPrice: 48000, type: "stock" },
-  { id: "4", name: "TIGER 미국S&P500", ticker: "360750", shares: 100, avgPrice: 14500, currentPrice: 16200, type: "etf" },
-  { id: "5", name: "네이버", ticker: "035420", shares: 15, avgPrice: 195000, currentPrice: 210000, type: "stock" },
+export const stockInfos: StockInfo[] = [
+  { ticker: "005930", name: "삼성전자", type: "stock" },
+  { ticker: "069500", name: "KODEX 200", type: "etf" },
+  { ticker: "035720", name: "카카오", type: "stock" },
+  { ticker: "360750", name: "TIGER 미국S&P500", type: "etf" },
+  { ticker: "035420", name: "네이버", type: "stock" },
 ];
+
+export const investmentTrades: InvestmentTrade[] = [
+  { id: "t1", ticker: "005930", name: "삼성전자", type: "stock", action: "buy", date: "2025-08-15", shares: 30, price: 56000, fee: 1680 },
+  { id: "t2", ticker: "005930", name: "삼성전자", type: "stock", action: "buy", date: "2025-11-20", shares: 20, price: 61000, fee: 1220 },
+  { id: "t3", ticker: "069500", name: "KODEX 200", type: "etf", action: "buy", date: "2025-09-10", shares: 30, price: 35000, fee: 1050 },
+  { id: "t4", ticker: "035720", name: "카카오", type: "stock", action: "buy", date: "2025-10-05", shares: 20, price: 52000, fee: 1040 },
+  { id: "t5", ticker: "360750", name: "TIGER 미국S&P500", type: "etf", action: "buy", date: "2025-07-01", shares: 60, price: 13800, fee: 828 },
+  { id: "t6", ticker: "360750", name: "TIGER 미국S&P500", type: "etf", action: "buy", date: "2025-12-15", shares: 40, price: 15500, fee: 620 },
+  { id: "t7", ticker: "035420", name: "네이버", type: "stock", action: "buy", date: "2025-09-25", shares: 15, price: 195000, fee: 2925 },
+];
+
+// 최근 30일 일별 시세 (간략화)
+function generateDailyPrices(): DailyPrice[] {
+  const tickers = [
+    { ticker: "005930", base: 58000, volatility: 0.02 },
+    { ticker: "069500", base: 36000, volatility: 0.015 },
+    { ticker: "035720", base: 50000, volatility: 0.025 },
+    { ticker: "360750", base: 15500, volatility: 0.018 },
+    { ticker: "035420", base: 200000, volatility: 0.02 },
+  ];
+
+  const prices: DailyPrice[] = [];
+  const today = new Date("2026-03-12");
+
+  for (const stock of tickers) {
+    let price = stock.base;
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // skip weekends
+
+      const change = (Math.random() - 0.48) * stock.volatility;
+      price = Math.round(price * (1 + change));
+      prices.push({
+        ticker: stock.ticker,
+        date: date.toISOString().split("T")[0],
+        close: price,
+      });
+    }
+  }
+  return prices;
+}
+
+export const dailyPrices: DailyPrice[] = generateDailyPrices();
 
 export const monthlySpending = [
   { month: "10월", income: 4500000, expense: 2800000 },
