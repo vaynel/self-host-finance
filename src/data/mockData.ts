@@ -18,13 +18,27 @@ export interface Account {
   lastSync?: string;
 }
 
-export interface Investment {
+export interface InvestmentTrade {
   id: string;
-  name: string;
   ticker: string;
+  name: string;
+  type: "stock" | "etf";
+  action: "buy" | "sell";
+  date: string;
   shares: number;
-  avgPrice: number;
-  currentPrice: number;
+  price: number;
+  fee?: number;
+}
+
+export interface DailyPrice {
+  ticker: string;
+  date: string;
+  close: number;
+}
+
+export interface StockInfo {
+  ticker: string;
+  name: string;
   type: "stock" | "etf";
 }
 
