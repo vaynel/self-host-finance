@@ -293,8 +293,8 @@ export default function Investments() {
                   }}
                   formatter={(value: number) => [formatKRW(value)]}
                 />
-                <Line type="monotone" dataKey="value" name="평가액" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="cost" name="원금" stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeDasharray="5 5" dot={false} />
+                <Line type="monotone" dataKey="value" name="평가액" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} />
+                <Line type="monotone" dataKey="cost" name="원금" stroke="hsl(var(--muted-foreground))" strokeWidth={1} strokeDasharray="5 5" dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
