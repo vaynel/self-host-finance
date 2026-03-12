@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
 import { investmentTrades, dailyPrices } from "@/data/mockData";
-import { TrendingUp, TrendingDown, BarChart3, Wallet, Bell, BellRing, ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
+import { TrendingUp, TrendingDown, BarChart3, Wallet, Bell, BellRing, ChevronDown, ChevronUp, Plus, Trash2, ShieldAlert, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
