@@ -4,9 +4,11 @@ import { Wallet, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -14,13 +16,13 @@ export default function Login() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    login(email, password);
     navigate("/");
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-8">
-        {/* Logo */}
         <div className="flex flex-col items-center gap-3">
           <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg">
             <Wallet className="h-7 w-7 text-primary-foreground" />
@@ -31,7 +33,6 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Form Card */}
         <Card className="border-border/50 shadow-xl">
           <CardContent className="pt-6 pb-8 px-8">
             <h2 className="text-lg font-semibold text-foreground mb-6 text-center">
@@ -56,6 +57,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-11 pl-10"
+                    required
                   />
                 </div>
               </div>
@@ -70,6 +72,7 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-11 pl-10 pr-10"
+                    required
                   />
                   <button
                     type="button"

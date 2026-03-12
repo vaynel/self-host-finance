@@ -7,7 +7,11 @@ import {
   Upload,
   Settings,
   Wallet,
+  LogOut,
+  User,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -41,6 +45,13 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -105,7 +116,26 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-3">
+      <SidebarFooter className="p-3 space-y-2">
+        {user && !collapsed && (
+          <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent/50 p-3">
+            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <User className="h-4 w-4 text-sidebar-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-sidebar-foreground truncate">{user.name}</p>
+              <p className="text-[10px] text-sidebar-foreground/60 truncate">{user.email}</p>
+            </div>
+            <button onClick={handleLogout} className="text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        {user && collapsed && (
+          <button onClick={handleLogout} className="w-full flex justify-center p-2 text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors">
+            <LogOut className="h-4 w-4" />
+          </button>
+        )}
         {!collapsed && (
           <div className="rounded-lg bg-sidebar-accent/50 p-3">
             <p className="text-[10px] text-sidebar-foreground/60">마지막 동기화</p>
