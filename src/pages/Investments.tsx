@@ -117,7 +117,7 @@ function StockDailyChart({ ticker, name, avgPrice }: { ticker: string; name: str
               strokeDasharray="4 4"
               label={{ value: `평단 ${formatKRW(avgPrice)}`, position: "right", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
             />
-            <Line type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

@@ -133,6 +133,7 @@ export default function Dashboard() {
                     outerRadius={80}
                     paddingAngle={3}
                     dataKey="value"
+                    isAnimationActive={false}
                   >
                     {categorySpending.slice(0, 5).map((entry, index) => (
                       <Cell key={index} fill={entry.color} />

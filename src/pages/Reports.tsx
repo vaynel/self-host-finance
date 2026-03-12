@@ -99,7 +99,7 @@ export default function Reports() {
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
                   <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`} />
                   <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [formatKRW(v)]} />
-                  <Line type="monotone" dataKey="assets" name="총 자산" stroke="hsl(var(--chart-investment))" strokeWidth={2.5} dot={{ fill: "hsl(var(--chart-investment))", r: 4 }} />
+                  <Line type="monotone" dataKey="assets" name="총 자산" stroke="hsl(var(--chart-investment))" strokeWidth={2.5} dot={{ fill: "hsl(var(--chart-investment))", r: 4 }} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
