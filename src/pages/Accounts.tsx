@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 
 const typeConfig = {
