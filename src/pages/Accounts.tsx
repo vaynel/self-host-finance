@@ -1,10 +1,11 @@
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
-import { accounts as initialAccounts, Account } from "@/data/mockData";
-import { Landmark, CreditCard, TrendingUp, Plus, Trash2, ArrowLeftRight } from "lucide-react";
+import { accounts as initialAccounts, Account, transactions } from "@/data/mockData";
+import { Landmark, TrendingUp, Plus, Trash2, ArrowLeftRight, ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInstitutionIcon } from "@/data/categoryIcons";
-import { useState } from "react";
+import { getCategoryIcon } from "@/data/categoryIcons";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,6 @@ import { toast } from "sonner";
 
 const typeConfig = {
   bank: { label: "은행 계좌", icon: Landmark },
-  card: { label: "카드", icon: CreditCard },
   investment: { label: "증권 계좌", icon: TrendingUp },
 };
 
@@ -24,11 +24,27 @@ function formatKRW(value: number) {
   return `₩${Math.abs(value).toLocaleString()}`;
 }
 
+// 계좌명과 transaction의 account 필드 매칭 (간략 매칭)
+function getAccountTransactions(account: Account) {
+  // institution 또는 name에서 키워드 추출하여 매칭
+  const keywords = [account.name, account.institution].flatMap((s) =>
+    s.replace(/\s+/g, "").toLowerCase().split("")
+  );
+  return transactions.filter((tx) => {
+    const txAccount = tx.account.replace(/\s+/g, "").toLowerCase();
+    // institution 포함 여부로 매칭
+    return account.institution.includes(tx.account) || tx.account.includes(account.institution.replace("KB", ""));
+  });
+}
+
 export default function Accounts() {
-  const [accountList, setAccountList] = useState<Account[]>(initialAccounts);
+  const [accountList, setAccountList] = useState<Account[]>(
+    initialAccounts.filter((a) => a.type !== "card")
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Add form state
   const [newName, setNewName] = useState("");
@@ -43,9 +59,20 @@ export default function Accounts() {
 
   const grouped = {
     bank: accountList.filter((a) => a.type === "bank"),
-    card: accountList.filter((a) => a.type === "card"),
     investment: accountList.filter((a) => a.type === "investment"),
   };
+
+  // 계좌별 거래내역 매핑
+  const accountTxMap = useMemo(() => {
+    const map: Record<string, typeof transactions> = {};
+    for (const account of accountList) {
+      map[account.id] = transactions.filter((tx) => {
+        const inst = account.institution.replace("KB", "");
+        return tx.account.includes(inst) || inst.includes(tx.account);
+      });
+    }
+    return map;
+  }, [accountList]);
 
   function handleAdd() {
     if (!newName.trim() || !newInstitution.trim()) {
@@ -87,7 +114,7 @@ export default function Accounts() {
       return;
     }
     const fromAccount = accountList.find((a) => a.id === fromId);
-    if (fromAccount && fromAccount.balance < amount && fromAccount.type !== "card") {
+    if (fromAccount && fromAccount.balance < amount) {
       toast.error("잔액이 부족합니다");
       return;
     }
@@ -132,50 +159,109 @@ export default function Accounts() {
             <div key={type} className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">{config.label}</h3>
-                <span className={cn(
-                  "text-sm font-mono font-semibold",
-                  total >= 0 ? "text-foreground" : "text-expense"
-                )}>
-                  {total < 0 ? "-" : ""}{formatKRW(total)}
+                <span className="text-sm font-mono font-semibold text-foreground">
+                  {formatKRW(total)}
                 </span>
               </div>
               <div className="space-y-2">
                 {items.map((account) => {
                   const instIcon = getInstitutionIcon(account.institution);
                   const Icon = instIcon.icon;
+                  const isExpanded = expandedId === account.id;
+                  const txList = accountTxMap[account.id] || [];
+
                   return (
-                    <Card key={account.id} className="p-4 glass-card flex items-center justify-between hover:bg-muted/30 transition-colors group">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", instIcon.color)}>
-                          <Icon className={cn("h-5 w-5", instIcon.iconColor)} />
+                    <div key={account.id}>
+                      <Card
+                        className={cn(
+                          "p-4 glass-card flex items-center justify-between hover:bg-muted/30 transition-colors group cursor-pointer",
+                          isExpanded && "rounded-b-none border-b-0"
+                        )}
+                        onClick={() => setExpandedId(isExpanded ? null : account.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", instIcon.color)}>
+                            <Icon className={cn("h-5 w-5", instIcon.iconColor)} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{account.name}</p>
+                            <p className="text-xs text-muted-foreground">{account.institution}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium">{account.name}</p>
-                          <p className="text-xs text-muted-foreground">{account.institution}</p>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-sm font-mono font-semibold text-foreground">
+                              {formatKRW(account.balance)}
+                            </p>
+                            {account.lastSync && (
+                              <p className="text-[10px] text-muted-foreground">동기화: {account.lastSync}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget(account);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className={cn(
-                            "text-sm font-mono font-semibold",
-                            account.balance < 0 && "text-expense"
-                          )}>
-                            {account.balance < 0 ? "-" : ""}{formatKRW(account.balance)}
-                          </p>
-                          {account.lastSync && (
-                            <p className="text-[10px] text-muted-foreground">동기화: {account.lastSync}</p>
+                      </Card>
+
+                      {/* Expanded Transaction List */}
+                      {isExpanded && (
+                        <Card className="rounded-t-none border-t-0 glass-card overflow-hidden">
+                          {txList.length > 0 ? (
+                            <div className="divide-y divide-border">
+                              {txList.map((tx) => {
+                                const catIcon = getCategoryIcon(tx.category);
+                                const CatIcon = catIcon.icon;
+                                return (
+                                  <div key={tx.id} className="px-5 py-3 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center", catIcon.color)}>
+                                        <CatIcon className={cn("h-3.5 w-3.5", catIcon.iconColor)} />
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-medium">{tx.description}</p>
+                                        <p className="text-[10px] text-muted-foreground">{tx.date} · {tx.category}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      {tx.amount > 0 ? (
+                                        <ArrowUpRight className="h-3 w-3 text-income" />
+                                      ) : (
+                                        <ArrowDownRight className="h-3 w-3 text-expense" />
+                                      )}
+                                      <span className={cn(
+                                        "text-xs font-mono font-semibold",
+                                        tx.amount > 0 ? "text-income" : "text-foreground"
+                                      )}>
+                                        {tx.amount > 0 ? "+" : "-"}{formatKRW(tx.amount)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-6 text-center text-xs text-muted-foreground">
+                              거래 내역이 없습니다
+                            </div>
                           )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteTarget(account)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </Card>
+                        </Card>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -203,7 +289,6 @@ export default function Accounts() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="bank">은행 계좌</SelectItem>
-                  <SelectItem value="card">카드</SelectItem>
                   <SelectItem value="investment">증권 계좌</SelectItem>
                 </SelectContent>
               </Select>
