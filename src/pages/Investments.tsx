@@ -159,74 +159,100 @@ export default function Investments() {
     });
   }, [holdings, totalCost]);
 
-  // 알림 트리거 체크
-  const triggeredAlerts = useMemo(() => {
-    return alerts.filter((a) => {
-      if (!a.active) return false;
-      const h = holdings.find((h) => h.ticker === a.ticker);
-      if (!h) return false;
-      switch (a.type) {
-        case "price_above": return h.currentPrice >= a.value;
-        case "price_below": return h.currentPrice <= a.value;
-        case "return_above": return h.returnRate >= a.value;
-        case "return_below": return h.returnRate <= a.value;
+  // 종목별 고점 계산
+  const peakPrices = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of holdings) {
+      const prices = dailyPrices.filter((p) => p.ticker === h.ticker);
+      const peak = prices.length > 0 ? Math.max(...prices.map((p) => p.close)) : h.currentPrice;
+      map.set(h.ticker, peak);
+    }
+    return map;
+  }, [holdings]);
+
+  // 글로벌 룰 트리거 체크 - 어떤 종목이 어떤 룰에 걸리는지
+  const triggeredItems = useMemo(() => {
+    const results: { rule: GlobalAlertRule; ticker: string; name: string; currentPrice: number; threshold: number; actual: number }[] = [];
+    for (const rule of globalRules) {
+      if (!rule.active) continue;
+      for (const h of holdings) {
+        if (rule.type === "cost_drop") {
+          const dropPercent = ((h.avgPrice - h.currentPrice) / h.avgPrice) * 100;
+          if (dropPercent >= rule.percent) {
+            results.push({ rule, ticker: h.ticker, name: h.name, currentPrice: h.currentPrice, threshold: rule.percent, actual: dropPercent });
+          }
+        } else if (rule.type === "peak_drop") {
+          const peak = peakPrices.get(h.ticker) || h.currentPrice;
+          const dropPercent = ((peak - h.currentPrice) / peak) * 100;
+          if (dropPercent >= rule.percent) {
+            results.push({ rule, ticker: h.ticker, name: h.name, currentPrice: h.currentPrice, threshold: rule.percent, actual: dropPercent });
+          }
+        }
       }
-    });
-  }, [alerts, holdings]);
+    }
+    return results;
+  }, [globalRules, holdings, peakPrices]);
 
   function handleToggleExpand(ticker: string) {
     setExpandedTicker((prev) => (prev === ticker ? null : ticker));
   }
 
-  function handleAddAlert() {
-    if (!newAlertTicker || !newAlertValue) {
-      toast.error("종목과 값을 입력해주세요");
+  function handleAddRule() {
+    if (!newRulePercent || Number(newRulePercent) <= 0) {
+      toast.error("유효한 %값을 입력해주세요");
       return;
     }
-    const h = holdings.find((h) => h.ticker === newAlertTicker);
-    if (!h) return;
-    const rule: AlertRule = {
-      id: `a${Date.now()}`,
-      ticker: newAlertTicker,
-      name: h.name,
-      type: newAlertType,
-      value: Number(newAlertValue),
+    // 중복 체크
+    const exists = globalRules.some((r) => r.type === newRuleType && r.percent === Number(newRulePercent));
+    if (exists) {
+      toast.error("동일한 조건의 룰이 이미 존재합니다");
+      return;
+    }
+    const rule: GlobalAlertRule = {
+      id: `g${Date.now()}`,
+      type: newRuleType,
+      percent: Number(newRulePercent),
       active: true,
     };
-    setAlerts((prev) => [...prev, rule]);
-    setNewAlertTicker("");
-    setNewAlertValue("");
-    toast.success(`${h.name} 알림 룰이 추가되었습니다`);
+    setGlobalRules((prev) => [...prev, rule]);
+    setNewRulePercent("");
+    toast.success("알림 룰이 추가되었습니다");
   }
 
-  function handleDeleteAlert(id: string) {
-    setAlerts((prev) => prev.filter((a) => a.id !== id));
+  function handleDeleteRule(id: string) {
+    setGlobalRules((prev) => prev.filter((r) => r.id !== id));
   }
 
-  function handleToggleAlert(id: string) {
-    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a)));
+  function handleToggleRule(id: string) {
+    setGlobalRules((prev) => prev.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
   }
 
   return (
     <AppLayout title="투자 관리">
       <div className="space-y-6 max-w-5xl">
         {/* 트리거된 알림 배너 */}
-        {triggeredAlerts.length > 0 && (
-          <Card className="border-primary/50 bg-primary/5 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <BellRing className="h-4 w-4 text-primary animate-pulse" />
-              <span className="text-sm font-semibold text-primary">알림 트리거!</span>
+        {triggeredItems.length > 0 && (
+          <Card className="border-destructive/50 bg-destructive/5 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BellRing className="h-4 w-4 text-destructive animate-pulse" />
+              <span className="text-sm font-semibold text-destructive">매도 알림 트리거!</span>
+              <Badge variant="destructive" className="text-[10px]">{triggeredItems.length}건</Badge>
             </div>
-            <div className="space-y-1">
-              {triggeredAlerts.map((a) => {
-                const h = holdings.find((h) => h.ticker === a.ticker);
-                return (
-                  <p key={a.id} className="text-xs text-foreground">
-                    <span className="font-medium">{a.name}</span>: {RULE_LABELS[a.type]} {a.value.toLocaleString()}{RULE_UNITS[a.type]}
-                    {h && (
-                      <span className="text-muted-foreground ml-1">
-                        (현재: {a.type.includes("price") ? formatKRW(h.currentPrice) : `${h.returnRate.toFixed(2)}%`})
-                      </span>
+            <div className="space-y-2">
+              {triggeredItems.map((item, i) => (
+                <div key={i} className="flex items-center justify-between text-xs bg-background/50 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                    <span className="font-medium">{item.name}</span>
+                    <span className="text-muted-foreground">
+                      {GLOBAL_RULE_INFO[item.rule.type].label} {item.rule.percent}% 룰
+                    </span>
+                  </div>
+                  <div className="font-mono text-expense font-semibold">
+                    -{item.actual.toFixed(1)}% ({formatKRW(item.currentPrice)})
+                  </div>
+                </div>
+              ))}
                     )}
                   </p>
                 );
