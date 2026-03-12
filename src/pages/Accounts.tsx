@@ -3,11 +3,12 @@ import { Card } from "@/components/ui/card";
 import { accounts } from "@/data/mockData";
 import { Landmark, CreditCard, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getInstitutionIcon } from "@/data/categoryIcons";
 
 const typeConfig = {
-  bank: { label: "은행 계좌", icon: Landmark, color: "bg-accent" },
-  card: { label: "카드", icon: CreditCard, color: "bg-destructive/10" },
-  investment: { label: "증권 계좌", icon: TrendingUp, color: "bg-accent" },
+  bank: { label: "은행 계좌", icon: Landmark },
+  card: { label: "카드", icon: CreditCard },
+  investment: { label: "증권 계좌", icon: TrendingUp },
 };
 
 function formatKRW(value: number) {
@@ -44,12 +45,13 @@ export default function Accounts() {
               </div>
               <div className="space-y-2">
                 {items.map((account) => {
-                  const Icon = config.icon;
+                  const instIcon = getInstitutionIcon(account.institution);
+                  const Icon = instIcon.icon;
                   return (
                     <Card key={account.id} className="p-4 glass-card flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer">
                       <div className="flex items-center gap-3">
-                        <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", config.color)}>
-                          <Icon className="h-5 w-5 text-accent-foreground" />
+                        <div className={cn("h-10 w-10 rounded-xl flex items-center justify-center", instIcon.color)}>
+                          <Icon className={cn("h-5 w-5", instIcon.iconColor)} />
                         </div>
                         <div>
                           <p className="text-sm font-medium">{account.name}</p>
