@@ -126,22 +126,19 @@ function StockDailyChart({ ticker, name, avgPrice }: { ticker: string; name: str
   );
 }
 
-// 기본 알림 룰 (데모)
-const DEFAULT_ALERTS: AlertRule[] = [
-  { id: "a1", ticker: "005930", name: "삼성전자", type: "price_above", value: 65000, active: true },
-  { id: "a2", ticker: "035720", name: "카카오", type: "price_below", value: 45000, active: true },
-  { id: "a3", ticker: "360750", name: "TIGER 미국S&P500", type: "return_above", value: 15, active: false },
+const DEFAULT_GLOBAL_RULES: GlobalAlertRule[] = [
+  { id: "g1", type: "cost_drop", percent: 10, active: true },
+  { id: "g2", type: "peak_drop", percent: 15, active: true },
 ];
 
 export default function Investments() {
   const [tab, setTab] = useState("portfolio");
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<AlertRule[]>(DEFAULT_ALERTS);
+  const [globalRules, setGlobalRules] = useState<GlobalAlertRule[]>(DEFAULT_GLOBAL_RULES);
 
-  // 알림 추가 폼 상태
-  const [newAlertTicker, setNewAlertTicker] = useState("");
-  const [newAlertType, setNewAlertType] = useState<AlertRule["type"]>("price_above");
-  const [newAlertValue, setNewAlertValue] = useState("");
+  // 새 룰 추가 폼
+  const [newRuleType, setNewRuleType] = useState<GlobalAlertRule["type"]>("cost_drop");
+  const [newRulePercent, setNewRulePercent] = useState("");
 
   const holdings = useMemo(() => computeHoldings(), []);
   const totalValue = holdings.reduce((s, h) => s + h.currentValue, 0);
