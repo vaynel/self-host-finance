@@ -252,6 +252,7 @@ export default function Investments() {
                     -{item.actual.toFixed(1)}% ({formatKRW(item.currentPrice)})
                   </div>
                 </div>
+              ))}
             </div>
           </Card>
         )}
