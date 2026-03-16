@@ -11,7 +11,7 @@ from app.core.security import decode_token
 from app.core.exceptions import raise_401
 from app.services.auth_service import get_user_by_id
 
-type DbSession = Annotated[Session, Depends(get_db)]
+DbSession = Annotated[Session, Depends(get_db)]
 
 
 def get_current_user(
