@@ -1,7 +1,0 @@
-INFO:     Will watch for changes in these directories: ['/root/self-host-finance/backend']
-INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-INFO:     Started reloader process [311068] using WatchFiles
-INFO:finflow.debug:CORS allow_origins: ['http://localhost:8000']
-INFO:     Started server process [311090]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.

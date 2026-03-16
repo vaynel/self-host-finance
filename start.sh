@@ -66,22 +66,44 @@ fi
 
 echo " - uvicorn 개발 서버 백그라운드 실행 (포트 8001)"
 cd "$PROJECT_ROOT/backend"
-nohup "$PYTHON_BIN" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 >>"$BACKEND_LOG" 2>&1 &
-BACKEND_PID=$!
-echo "$BACKEND_PID" >"$BACKEND_PID_FILE"
-echo " - backend PID: $BACKEND_PID (저장: $BACKEND_PID_FILE)"
+if [ -f "$BACKEND_PID_FILE" ] && kill -0 "$(cat "$BACKEND_PID_FILE" 2>/dev/null)" >/dev/null 2>&1; then
+  echo " - backend 이미 실행 중입니다. (PID: $(cat "$BACKEND_PID_FILE"))"
+else
+  nohup "$PYTHON_BIN" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 >>"$BACKEND_LOG" 2>&1 &
+  BACKEND_PID=$!
+  echo "$BACKEND_PID" >"$BACKEND_PID_FILE"
+  echo " - backend PID: $BACKEND_PID (저장: $BACKEND_PID_FILE)"
+fi
 
 echo
 echo "3) Frontend 서버 실행 (nohup)"
 if [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
-  if command -v npm >/dev/null 2>&1; then
-    cd "$PROJECT_ROOT/frontend"
-    nohup npm run dev >>"$FRONTEND_LOG" 2>&1 &
-    FRONTEND_PID=$!
-    echo "$FRONTEND_PID" >"$FRONTEND_PID_FILE"
-    echo " - frontend PID: $FRONTEND_PID (저장: $FRONTEND_PID_FILE)"
+  cd "$PROJECT_ROOT/frontend"
+  if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE" 2>/dev/null)" >/dev/null 2>&1; then
+    echo " - frontend 이미 실행 중입니다. (PID: $(cat "$FRONTEND_PID_FILE"))"
   else
-    echo "경고: npm이 없어 frontend 실행을 건너뜁니다."
+    if command -v bun >/dev/null 2>&1; then
+      nohup bun run dev >>"$FRONTEND_LOG" 2>&1 &
+    elif command -v npm >/dev/null 2>&1; then
+      nohup npm run dev >>"$FRONTEND_LOG" 2>&1 &
+    elif command -v yarn >/dev/null 2>&1; then
+      nohup yarn dev >>"$FRONTEND_LOG" 2>&1 &
+    else
+      echo "경고: bun/npm/yarn이 없어 frontend 실행을 건너뜁니다."
+      echo " - 해결(예): Node.js 18+ 설치 후 npm 사용"
+      FRONTEND_PID=""
+    fi
+    if [ -n "${FRONTEND_PID:-}" ]; then
+      :
+    else
+      if jobs -p >/dev/null 2>&1; then
+        FRONTEND_PID="$(jobs -p | tail -n 1)"
+      fi
+    fi
+    if [ -n "${FRONTEND_PID:-}" ]; then
+      echo "$FRONTEND_PID" >"$FRONTEND_PID_FILE"
+      echo " - frontend PID: $FRONTEND_PID (저장: $FRONTEND_PID_FILE)"
+    fi
   fi
 else
   echo "경고: frontend/package.json이 없어 frontend 실행을 건너뜁니다. (현재 frontend 디렉터리가 비어있습니다)"

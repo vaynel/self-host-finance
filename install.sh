@@ -133,6 +133,32 @@ else
 fi
 
 echo
+echo "3) frontend 의존성 설치"
+if [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
+  cd "$PROJECT_ROOT/frontend"
+  if command -v bun >/dev/null 2>&1; then
+    echo " - bun 감지: bun install"
+    bun install
+  elif command -v npm >/dev/null 2>&1; then
+    if [ -f "package-lock.json" ]; then
+      echo " - package-lock.json 감지: npm ci"
+      npm ci
+    else
+      echo " - npm install"
+      npm install
+    fi
+  elif command -v yarn >/dev/null 2>&1; then
+    echo " - yarn 감지: yarn install"
+    yarn install
+  else
+    echo "경고: bun/npm/yarn이 없어 frontend 설치를 건너뜁니다."
+    echo " - 해결(예): Node.js 18+ 설치 후 npm 사용"
+  fi
+else
+  echo " - frontend/package.json이 없어 frontend 설치를 건너뜁니다."
+fi
+
+echo
 echo "[FinFlow] 설치가 완료되었습니다."
-echo "이제 .start.sh를 사용해 서버를 실행할 수 있습니다."
+echo "이제 start.sh를 사용해 서버를 실행할 수 있습니다."
 
