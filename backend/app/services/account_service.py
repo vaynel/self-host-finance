@@ -19,6 +19,7 @@ def _acc_to_dict(a: Account) -> dict:
         "type": a.type,
         "balance": float(a.balance),
         "institution": a.institution,
+        "account_number": a.account_number,
         "lastSync": a.last_sync.isoformat() if a.last_sync else None,
     }
 
@@ -46,6 +47,7 @@ def create_account(db: Session, user_id: str, data: dict) -> dict:
         type=data["type"],
         balance=Decimal(str(data["balance"])),
         institution=data["institution"],
+        account_number=data.get("account_number"),
     )
     db.add(a)
     db.commit()

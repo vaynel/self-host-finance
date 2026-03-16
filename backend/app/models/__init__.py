@@ -5,6 +5,7 @@ from app.models.transaction import Transaction
 from app.models.account import Account
 from app.models.investment import InvestmentTrade
 from app.models.settings import UserSettings
+from app.models.category_keyword import CategoryKeyword
 
 __all__ = [
     "User",
@@ -13,4 +14,5 @@ __all__ = [
     "Account",
     "InvestmentTrade",
     "UserSettings",
+    "CategoryKeyword",
 ]

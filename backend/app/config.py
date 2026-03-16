@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     env: str = "development"
 
     # CORS
-    cors_origin: str = "http://localhost:8000"
+    cors_origin: str = "http://localhost:8080"
 
     class Config:
         env_file = ".env"

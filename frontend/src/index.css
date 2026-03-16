@@ -1,0 +1,169 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 172 66% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 93%;
+    --secondary-foreground: 220 25% 10%;
+
+    --muted: 220 15% 93%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 172 40% 92%;
+    --accent-foreground: 172 66% 25%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 172 66% 40%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 220 25% 10%;
+    --sidebar-foreground: 220 15% 80%;
+    --sidebar-primary: 172 66% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 16%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 172 66% 50%;
+
+    --chart-income: 172 66% 40%;
+    --chart-expense: 0 72% 55%;
+    --chart-investment: 262 60% 55%;
+    --chart-savings: 38 92% 50%;
+  }
+
+  .dark {
+    --background: 222 25% 8%;
+    --foreground: 220 15% 90%;
+
+    --card: 222 22% 12%;
+    --card-foreground: 220 15% 90%;
+
+    --popover: 222 22% 12%;
+    --popover-foreground: 220 15% 90%;
+
+    --primary: 172 66% 50%;
+    --primary-foreground: 220 25% 8%;
+
+    --secondary: 222 18% 18%;
+    --secondary-foreground: 220 15% 85%;
+
+    --muted: 222 18% 18%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 172 30% 15%;
+    --accent-foreground: 172 66% 60%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 222 18% 20%;
+    --input: 222 18% 20%;
+    --ring: 172 66% 50%;
+
+    --sidebar-background: 222 30% 6%;
+    --sidebar-foreground: 220 15% 75%;
+    --sidebar-primary: 172 66% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 25% 12%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 222 25% 14%;
+    --sidebar-ring: 172 66% 50%;
+
+    --chart-income: 172 66% 50%;
+    --chart-expense: 0 72% 60%;
+    --chart-investment: 262 60% 60%;
+    --chart-savings: 38 92% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold tracking-tight font-mono;
+  }
+
+  .stat-label {
+    @apply text-sm text-muted-foreground font-medium;
+  }
+
+  .text-income {
+    color: hsl(var(--chart-income));
+  }
+
+  .text-expense {
+    color: hsl(var(--chart-expense));
+  }
+
+  .text-investment {
+    color: hsl(var(--chart-investment));
+  }
+
+  .text-success {
+    color: hsl(var(--success));
+  }
+
+  .bg-income {
+    background-color: hsl(var(--chart-income));
+  }
+
+  .bg-expense {
+    background-color: hsl(var(--chart-expense));
+  }
+
+  .bg-investment {
+    background-color: hsl(var(--chart-investment));
+  }
+}

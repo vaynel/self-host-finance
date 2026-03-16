@@ -11,6 +11,7 @@ class AccountCreate(BaseModel):
     type: str
     balance: float
     institution: str
+    account_number: Optional[str] = None
 
     @field_validator("type")
     @classmethod
@@ -25,6 +26,7 @@ class AccountUpdate(BaseModel):
     type: Optional[str] = None
     balance: Optional[float] = None
     institution: Optional[str] = None
+    account_number: Optional[str] = None
 
     @field_validator("type")
     @classmethod
@@ -40,6 +42,7 @@ class AccountResponse(BaseModel):
     type: str
     balance: float
     institution: str
+    account_number: Optional[str] = None
     lastSync: Optional[str] = None
 
 

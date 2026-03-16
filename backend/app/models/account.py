@@ -15,6 +15,7 @@ class Account(Base):
     type = Column(String(20), nullable=False)  # bank, investment
     balance = Column(Numeric(15, 2), nullable=False)
     institution = Column(String(100), nullable=False)
+    account_number = Column(String(100), nullable=True)  # 계좌번호 (선택)
     last_sync = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
