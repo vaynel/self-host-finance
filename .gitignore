@@ -24,3 +24,7 @@ backend/.venv/
 backend/uvicorn.log
 logs/
 
+# Frontend / Node
+node_modules/
+frontend/node_modules/
+

@@ -136,6 +136,23 @@ echo
 echo "3) frontend 의존성 설치"
 if [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
   cd "$PROJECT_ROOT/frontend"
+  if ! command -v bun >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1 && ! command -v yarn >/dev/null 2>&1; then
+    echo " - bun/npm/yarn 미설치 감지: Node.js(20+) 설치를 시도합니다."
+    if command -v dnf >/dev/null 2>&1; then
+      set +e
+      # RHEL9 계열: nodejs 모듈이 환경에 따라 필요할 수 있어 best-effort로 처리
+      dnf -y module enable nodejs:20 >/dev/null 2>&1
+      dnf -y install nodejs npm >/dev/null 2>&1
+      DNF_RC=$?
+      set -e
+      if [ "$DNF_RC" -ne 0 ]; then
+        echo "경고: dnf로 Node.js/npm 설치에 실패했습니다. (레포/권한/네트워크 확인 필요)"
+      fi
+    else
+      echo "경고: dnf가 없어 자동 설치를 건너뜁니다."
+    fi
+  fi
+
   if command -v bun >/dev/null 2>&1; then
     echo " - bun 감지: bun install"
     bun install
@@ -152,7 +169,7 @@ if [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
     yarn install
   else
     echo "경고: bun/npm/yarn이 없어 frontend 설치를 건너뜁니다."
-    echo " - 해결(예): Node.js 18+ 설치 후 npm 사용"
+    echo " - 해결(예): Node.js 20+ 설치 후 npm 사용"
   fi
 else
   echo " - frontend/package.json이 없어 frontend 설치를 건너뜁니다."
