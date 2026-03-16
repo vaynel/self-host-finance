@@ -136,20 +136,67 @@ echo
 echo "3) frontend 의존성 설치"
 if [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
   cd "$PROJECT_ROOT/frontend"
-  if ! command -v bun >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1 && ! command -v yarn >/dev/null 2>&1; then
-    echo " - bun/npm/yarn 미설치 감지: Node.js(20+) 설치를 시도합니다."
+  ver_ge() {
+    # usage: ver_ge 20.19.0 20.18.1  -> true if 20.18.1 >= 20.19.0
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+  }
+
+  NODE_OK=0
+  if command -v node >/dev/null 2>&1; then
+    NODE_VER="$(node -v | sed 's/^v//' || true)"
+    if [ -n "$NODE_VER" ] && ver_ge "20.19.0" "$NODE_VER"; then
+      NODE_OK=1
+    fi
+  fi
+
+  if [ "$NODE_OK" -ne 1 ]; then
+    echo " - Node.js 버전이 낮거나 미설치입니다. (필요: >= 20.19.0 또는 >= 22.12.0)"
+    echo " - 현재: $(node -v 2>/dev/null || echo 'node 없음')"
+    echo " - Node.js(22 LTS) 설치/업그레이드를 시도합니다."
     if command -v dnf >/dev/null 2>&1; then
       set +e
-      # RHEL9 계열: nodejs 모듈이 환경에 따라 필요할 수 있어 best-effort로 처리
-      dnf -y module enable nodejs:20 >/dev/null 2>&1
+      # 1) AppStream 모듈로 시도 (환경에 따라 18만 제공될 수도 있음)
+      dnf -y module reset nodejs >/dev/null 2>&1
+      dnf -y module enable nodejs:22 >/dev/null 2>&1
       dnf -y install nodejs npm >/dev/null 2>&1
       DNF_RC=$?
       set -e
       if [ "$DNF_RC" -ne 0 ]; then
         echo "경고: dnf로 Node.js/npm 설치에 실패했습니다. (레포/권한/네트워크 확인 필요)"
       fi
+
+      # 2) 아직도 버전이 낮으면 NodeSource로 시도 (best-effort)
+      if command -v node >/dev/null 2>&1; then
+        NODE_VER="$(node -v | sed 's/^v//' || true)"
+        if [ -n "$NODE_VER" ] && ! ver_ge "20.19.0" "$NODE_VER"; then
+          if command -v curl >/dev/null 2>&1; then
+            echo " - AppStream Node 버전이 낮아 NodeSource로 업그레이드를 시도합니다."
+            set +e
+            curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - >/dev/null 2>&1
+            dnf -y install nodejs >/dev/null 2>&1
+            NS_RC=$?
+            set -e
+            if [ "$NS_RC" -ne 0 ]; then
+              echo "경고: NodeSource 설치에 실패했습니다."
+            fi
+          else
+            echo "경고: curl이 없어 NodeSource 설치를 건너뜁니다."
+          fi
+        fi
+      fi
     else
       echo "경고: dnf가 없어 자동 설치를 건너뜁니다."
+    fi
+  fi
+
+  # 설치/업그레이드 후 최종 버전 재확인
+  if command -v node >/dev/null 2>&1; then
+    NODE_VER="$(node -v | sed 's/^v//' || true)"
+    if [ -n "$NODE_VER" ] && ver_ge "20.19.0" "$NODE_VER"; then
+      :
+    else
+      echo "경고: Node 버전이 요구사항을 만족하지 않습니다. (현재: v${NODE_VER:-unknown})"
+      echo " - 권장: Node 22.12+ 또는 20.19+ 설치"
     fi
   fi
 
@@ -164,6 +211,11 @@ if [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
       echo " - npm install"
       npm install
     fi
+
+    echo " - npm audit fix (best-effort)"
+    set +e
+    npm audit fix >/dev/null 2>&1
+    set -e
   elif command -v yarn >/dev/null 2>&1; then
     echo " - yarn 감지: yarn install"
     yarn install
