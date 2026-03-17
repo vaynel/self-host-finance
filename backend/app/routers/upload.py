@@ -8,8 +8,14 @@ from app.dependencies import get_current_user, DbSession
 from app.models.user import User
 from app.schemas.common import success_response
 from app.services.upload_service import import_transactions
-from app.services.smart_upload_parser import parse_csv_smart, parse_xlsx_smart
+from app.services.smart_upload_parser import (
+    parse_csv_smart,
+    parse_xlsx_smart,
+    extract_csv_headers_and_samples,
+    extract_xlsx_headers_and_samples,
+)
 from app.services.category_classifier import auto_classify_category, auto_detect_type
+from app.services.parsing_strategy_service import get_or_create_strategy, mapping_to_index_map
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -29,18 +35,31 @@ async def preview_transactions(
     content = await file.read()
     ext = (file.filename or "").lower().split(".")[-1] if file.filename else ""
     fmt = format or ext
+
+    # Strategy: match or infer via LLM (if key available). Fall back to heuristic on failure.
+    index_override = None
+    try:
+        if fmt in ("csv", "txt"):
+            headers, samples = extract_csv_headers_and_samples(content)
+        else:
+            headers, samples = extract_xlsx_headers_and_samples(content)
+        if db and headers:
+            strat = await get_or_create_strategy(db, current_user.id, headers, samples)
+            index_override = mapping_to_index_map(headers, strat.mapping)
+    except Exception:
+        index_override = None
     
     # Use smart parser
     if fmt in ("csv", "txt"):
-        rows, column_mapping = parse_csv_smart(content)
+        rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
     elif fmt in ("xlsx", "xls"):
-        rows, column_mapping = parse_xlsx_smart(content)
+        rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
     else:
         # Try by content
         if content[:4] == b"PK\x03\x04":
-            rows, column_mapping = parse_xlsx_smart(content)
+            rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
         else:
-            rows, column_mapping = parse_csv_smart(content)
+            rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
     
     # Get account name if accountId provided
     account_name = None
@@ -110,18 +129,31 @@ async def upload_transactions(
     content = await file.read()
     ext = (file.filename or "").lower().split(".")[-1] if file.filename else ""
     fmt = format or ext
+
+    # Strategy: match or infer via LLM (if key available). Fall back to heuristic on failure.
+    index_override = None
+    try:
+        if fmt in ("csv", "txt"):
+            headers, samples = extract_csv_headers_and_samples(content)
+        else:
+            headers, samples = extract_xlsx_headers_and_samples(content)
+        if db and headers:
+            strat = await get_or_create_strategy(db, current_user.id, headers, samples)
+            index_override = mapping_to_index_map(headers, strat.mapping)
+    except Exception:
+        index_override = None
     
     # Use smart parser
     if fmt in ("csv", "txt"):
-        rows, column_mapping = parse_csv_smart(content)
+        rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
     elif fmt in ("xlsx", "xls"):
-        rows, column_mapping = parse_xlsx_smart(content)
+        rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
     else:
         # Try by content
         if content[:4] == b"PK\x03\x04":
-            rows, column_mapping = parse_xlsx_smart(content)
+            rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
         else:
-            rows, column_mapping = parse_csv_smart(content)
+            rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
     
     # Get account name from accountId
     from app.services.account_service import get_account

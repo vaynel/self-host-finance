@@ -547,8 +547,70 @@ GET /v1/category-keywords/categories
 1. ✅ **완료:** Frontend 업로드 UI 연결 (우선순위 1)
 2. ✅ **완료:** 중복 거래 감지 (우선순위 2)
 3. ✅ **완료:** 업로드 전 미리보기 (우선순위 3)
-4. **다음 작업:** 수정된 미리보기 데이터로 업로드 기능
-5. **장기 작업:** 다양한 은행 형식 사전 정의
+4. ✅ **완료:** LLM(Groq) 기반 파싱 전략(Strategy) 자동 생성/재사용
+5. **다음 작업:** 수정된 미리보기 데이터로 업로드 기능(프론트 수정값을 백엔드로 전달)
+6. **장기 작업:** 다양한 은행 형식 사전 정의(LLM 전략으로 대부분 커버되지만, 검증/회귀 방지용)
+
+---
+
+## LLM 기반 파싱 전략(Strategy) 고도화 (Groq)
+
+### 목표
+
+- 어떤 은행/카드/증권 CSV/XLSX가 들어와도 **LLM이 헤더/샘플을 분석해 “파싱 전략”을 JSON으로 생성**
+- 생성된 전략을 DB에 저장해 **같은 형식(=fingerprint)이 다시 오면 LLM 호출 없이 재사용**
+
+### 동작 흐름
+
+1. 업로드 파일에서 **헤더 + 샘플 N행**을 추출
+2. 헤더/샘플로 **fingerprint(sha256)** 생성
+3. DB `parsing_strategies`에서 `(user_id, fingerprint)` 전략 조회
+4. 있으면 → 그 전략의 mapping을 사용해 파싱
+5. 없으면 → Groq LLM 호출로 mapping/rules JSON 생성 → DB 저장 → 즉시 적용
+
+### 구성 요소
+
+- **DB 테이블**: `parsing_strategies`
+- **Backend 서비스**
+  - `backend/app/services/groq_client.py`: Groq(OpenAI 호환) Chat Completions 호출
+  - `backend/app/services/parsing_strategy_service.py`: fingerprint/전략 생성/저장/적용
+  - `backend/app/services/smart_upload_parser.py`: 전략 index mapping override 적용
+- **API**
+  - 기존 업로드 API(`/v1/upload/transactions`, `/v1/upload/preview`)에서 자동 적용
+  - 관리 API: `GET/DELETE /v1/parsing-strategies`
+
+### 환경 변수
+
+- `GROQ_API_KEY`: Groq API Key (필수)
+- `GROQ_MODEL`: 모델명 (기본값: `llama3-8b-8192`)
+- `GROQ_BASE_URL`: 기본값 `https://api.groq.com/openai/v1`
+
+### 전략 JSON 스키마(요약)
+
+```json
+{
+  "mapping": {
+    "date": "거래일자",
+    "description": "적요",
+    "amount": "금액",
+    "deposit": "입금",
+    "withdraw": "출금",
+    "memo": "비고",
+    "balance": "잔액"
+  },
+  "rules": {
+    "amount": { "mode": "amount|deposit_withdraw", "negate_withdraw": true },
+    "date": { "formats": ["%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y%m%d"] }
+  }
+}
+```
+
+### 주의사항(현재 설계)
+
+- 전략은 **사용자(user_id) 단위로 저장**됩니다. (기관별 공유가 필요하면 global 전략 테이블 추가 가능)
+- LLM이 생성한 mapping이 틀릴 수 있으므로, 운영 단계에서는:
+  - 전략 생성 후 **미리보기에서 확인**
+  - 전략 관리 UI(선택)로 **전략 수정/비활성화**를 권장
 
 ---
 

@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
-from app.routers import auth, transactions, accounts, investments, reports, upload, settings as settings_router, category_keywords
+from app.routers import auth, transactions, accounts, investments, reports, upload, settings as settings_router, category_keywords, parsing_strategies
 
 logger = logging.getLogger("finflow.debug")
 logging.basicConfig(level=logging.DEBUG)
@@ -110,6 +110,7 @@ app.include_router(reports.router, prefix="/v1")
 app.include_router(upload.router, prefix="/v1")
 app.include_router(settings_router.router, prefix="/v1")
 app.include_router(category_keywords.router, prefix="/v1")
+app.include_router(parsing_strategies.router, prefix="/v1")
 
 
 @app.get("/health")

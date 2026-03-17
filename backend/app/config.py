@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # CORS
     cors_origin: str = "http://localhost:8080"
 
+    # LLM (Groq - OpenAI compatible)
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "llama3-8b-8192"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

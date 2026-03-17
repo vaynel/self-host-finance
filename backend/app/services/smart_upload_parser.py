@@ -7,9 +7,41 @@ from typing import Any, Optional
 from datetime import datetime
 
 
+def extract_csv_headers_and_samples(content: bytes, encoding: str = "utf-8-sig", sample_n: int = 5) -> tuple[list[str], list[list[Any]]]:
+    """Extract CSV headers and a few raw sample rows (as lists)."""
+    text = content.decode(encoding, errors="replace")
+    reader = csv.reader(io.StringIO(text))
+    headers = next(reader, [])
+    samples: list[list[Any]] = []
+    for _ in range(sample_n):
+        r = next(reader, None)
+        if r is None:
+            break
+        samples.append(r)
+    return [str(h).strip() for h in headers], samples
+
+
+def extract_xlsx_headers_and_samples(content: bytes, sample_n: int = 5) -> tuple[list[str], list[list[Any]]]:
+    """Extract XLSX headers and a few raw sample rows (as lists) from the first sheet."""
+    import openpyxl
+
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    headers = [str(c.value).strip() if c.value is not None else "" for c in ws[1]]
+    samples: list[list[Any]] = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row is None:
+            continue
+        samples.append(list(row))
+        if len(samples) >= sample_n:
+            break
+    wb.close()
+    return headers, samples
+
+
 def detect_column_mapping(headers: list[str]) -> dict[str, Optional[int]]:
     """Detect column mapping from headers for various bank formats."""
-    mapping = {
+    mapping: dict[str, Optional[int]] = {
         "date": None,
         "description": None,
         "amount": None,
@@ -86,6 +118,19 @@ def detect_column_mapping(headers: list[str]) -> dict[str, Optional[int]]:
     return mapping
 
 
+def apply_index_mapping(base: dict[str, Optional[int]], override: dict[str, Optional[int]] | None) -> dict[str, Optional[int]]:
+    """
+    Merge an override index mapping into the base mapping.
+    """
+    if not override:
+        return base
+    merged = dict(base)
+    for k, v in override.items():
+        if k in merged and v is not None:
+            merged[k] = v
+    return merged
+
+
 def parse_amount(value: Any) -> float:
     """Parse amount from various formats."""
     if value is None:
@@ -150,7 +195,12 @@ def parse_date(value: Any) -> Optional[str]:
     return None
 
 
-def parse_csv_smart(content: bytes, encoding: str = "utf-8-sig") -> tuple[list[dict[str, Any]], dict[str, Optional[int]]]:
+def parse_csv_smart(
+    content: bytes,
+    encoding: str = "utf-8-sig",
+    *,
+    index_mapping_override: dict[str, Optional[int]] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Optional[int]]]:
     """Parse CSV with smart column detection. Returns (rows, column_mapping)."""
     text = content.decode(encoding, errors="replace")
     reader = csv.reader(io.StringIO(text))
@@ -161,7 +211,7 @@ def parse_csv_smart(content: bytes, encoding: str = "utf-8-sig") -> tuple[list[d
         return [], {}
     
     # Detect column mapping
-    mapping = detect_column_mapping(headers)
+    mapping = apply_index_mapping(detect_column_mapping(headers), index_mapping_override)
     
     rows = []
     for row in reader:
@@ -171,7 +221,7 @@ def parse_csv_smart(content: bytes, encoding: str = "utf-8-sig") -> tuple[list[d
         # Extract values using mapping
         date_val = parse_date(row[mapping["date"]]) if mapping["date"] is not None and mapping["date"] < len(row) else None
         description = str(row[mapping["description"]]).strip() if mapping["description"] is not None and mapping["description"] < len(row) else ""
-        amount_val = parse_amount(row[mapping["amount"]]) if mapping["amount"] is not None and mapping["amount"] < len(row) else 0.0
+        amount_val = parse_amount(row[mapping["amount"]]) if mapping.get("amount") is not None and mapping["amount"] < len(row) else 0.0
         type_val = str(row[mapping["type"]]).strip().lower() if mapping["type"] is not None and mapping["type"] < len(row) else None
         category_val = str(row[mapping["category"]]).strip() if mapping["category"] is not None and mapping["category"] < len(row) else None
         account_val = str(row[mapping["account"]]).strip() if mapping["account"] is not None and mapping["account"] < len(row) else None
@@ -194,7 +244,11 @@ def parse_csv_smart(content: bytes, encoding: str = "utf-8-sig") -> tuple[list[d
     return rows, mapping
 
 
-def parse_xlsx_smart(content: bytes) -> tuple[list[dict[str, Any]], dict[str, Optional[int]]]:
+def parse_xlsx_smart(
+    content: bytes,
+    *,
+    index_mapping_override: dict[str, Optional[int]] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Optional[int]]]:
     """Parse XLSX with smart column detection. Returns (rows, column_mapping)."""
     import openpyxl
     
@@ -211,7 +265,7 @@ def parse_xlsx_smart(content: bytes) -> tuple[list[dict[str, Any]], dict[str, Op
         return [], {}
     
     # Detect column mapping
-    mapping = detect_column_mapping(headers)
+    mapping = apply_index_mapping(detect_column_mapping(headers), index_mapping_override)
     
     rows = []
     for row in ws.iter_rows(min_row=2, values_only=True):
