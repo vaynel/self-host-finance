@@ -20,15 +20,22 @@ const CATEGORY_COLORS = [
   "hsl(var(--chart-5))",
 ];
 
-function formatKRW(value: number) {
-  if (Math.abs(value) >= 10000) {
-    return `${(value / 10000).toFixed(0)}만원`;
-  }
-  return `${value.toLocaleString()}원`;
+function toNumberSafe(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function formatKRWFull(value: number) {
-  return `₩${value.toLocaleString()}`;
+function formatKRW(value: unknown) {
+  const v = toNumberSafe(value);
+  if (Math.abs(v) >= 10000) {
+    return `${(v / 10000).toFixed(0)}만원`;
+  }
+  return `${v.toLocaleString()}원`;
+}
+
+function formatKRWFull(value: unknown) {
+  const v = toNumberSafe(value);
+  return `₩${v.toLocaleString()}`;
 }
 
 export default function Dashboard() {
@@ -116,7 +123,7 @@ export default function Dashboard() {
     if (!categorySpendingData) return [];
     return categorySpendingData.map((cat, index) => ({
       name: cat.name,
-      value: cat.value,
+      value: toNumberSafe((cat as any).value),
       color: cat.color || CATEGORY_COLORS[index % CATEGORY_COLORS.length],
     }));
   }, [categorySpendingData]);
@@ -238,8 +245,8 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
             <div className="space-y-1.5 mt-2">
-              {categorySpending.slice(0, 5).map((cat) => (
-                <div key={cat.name} className="flex items-center justify-between text-xs">
+              {categorySpending.slice(0, 5).map((cat, index) => (
+                <div key={`${cat.name || "category"}-${index}`} className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
                     <span className="text-muted-foreground">{cat.name}</span>

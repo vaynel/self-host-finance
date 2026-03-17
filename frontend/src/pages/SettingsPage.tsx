@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 
@@ -196,6 +197,7 @@ export default function SettingsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>키워드 추가</DialogTitle>
+              <DialogDescription className="sr-only">카테고리 자동 분류에 사용할 키워드를 추가합니다.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">

@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Upload as UploadIcon, FileSpreadsheet, Mail, RefreshCw, X, CheckCircle2, AlertCircle, Loader2, Eye } from "lucide-react";
@@ -58,7 +59,14 @@ export default function UploadPage() {
   const previewMutation = useMutation({
     mutationFn: async ({ file, accountId }: { file: File; accountId?: string }) => {
       const ext = file.name.split(".").pop()?.toLowerCase();
-      const format = ext === "csv" || ext === "txt" ? "csv" : ext === "xlsx" || ext === "xls" ? "xlsx" : undefined;
+      const format =
+        ext === "csv" || ext === "txt"
+          ? "csv"
+          : ext === "xlsx"
+            ? "xlsx"
+            : ext === "xls"
+              ? "xls"
+              : undefined;
       return uploadApi.preview(file, format, accountId);
     },
     onSuccess: (response) => {
@@ -74,7 +82,14 @@ export default function UploadPage() {
   const uploadMutation = useMutation({
     mutationFn: async ({ file, accountId, skipDupes }: { file: File; accountId: string; skipDupes: boolean }) => {
       const ext = file.name.split(".").pop()?.toLowerCase();
-      const format = ext === "csv" || ext === "txt" ? "csv" : ext === "xlsx" || ext === "xls" ? "xlsx" : undefined;
+      const format =
+        ext === "csv" || ext === "txt"
+          ? "csv"
+          : ext === "xlsx"
+            ? "xlsx"
+            : ext === "xls"
+              ? "xls"
+              : undefined;
       return uploadApi.uploadTransactions(file, accountId, format, skipDupes);
     },
     onSuccess: (response, variables) => {
@@ -465,6 +480,7 @@ export default function UploadPage() {
           <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>업로드 결과 상세</DialogTitle>
+              <DialogDescription className="sr-only">업로드 결과 요약 및 오류 상세를 확인합니다.</DialogDescription>
             </DialogHeader>
             {selectedHistoryItem && (
               <div className="space-y-4 py-4">
@@ -536,6 +552,7 @@ export default function UploadPage() {
           <DialogContent className="sm:max-w-5xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>업로드 미리보기</DialogTitle>
+              <DialogDescription className="sr-only">업로드 전에 파싱된 거래 내역을 미리보고 수정할 수 있습니다.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <p className="text-sm text-muted-foreground">

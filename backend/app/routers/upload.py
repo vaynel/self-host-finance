@@ -11,10 +11,13 @@ from app.services.upload_service import import_transactions
 from app.services.smart_upload_parser import (
     parse_csv_smart,
     parse_xlsx_smart,
+    parse_xls_smart,
     extract_csv_headers_and_samples,
     extract_xlsx_headers_and_samples,
+    extract_xls_headers_and_samples,
 )
-from app.services.category_classifier import auto_classify_category, auto_detect_type
+from app.services.category_classifier import auto_detect_type
+from app.services.llm_category_enricher import enrich_categories_for_rows
 from app.services.parsing_strategy_service import get_or_create_strategy, mapping_to_index_map
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -26,7 +29,7 @@ async def preview_transactions(
     format: Optional[str] = Form(None),
     accountId: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
-    db: DbSession = None,
+    db: DbSession = ...,
 ):
     """
     Preview transactions from CSV or XLSX without importing.
@@ -41,6 +44,8 @@ async def preview_transactions(
     try:
         if fmt in ("csv", "txt"):
             headers, samples = extract_csv_headers_and_samples(content)
+        elif fmt == "xls":
+            headers, samples = extract_xls_headers_and_samples(content)
         else:
             headers, samples = extract_xlsx_headers_and_samples(content)
         if db and headers:
@@ -49,15 +54,30 @@ async def preview_transactions(
     except Exception:
         index_override = None
     
-    # Use smart parser
+    # Use smart parser (robust fallback: if xlsx parse fails, retry as csv)
     if fmt in ("csv", "txt"):
         rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
-    elif fmt in ("xlsx", "xls"):
-        rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+    elif fmt == "xls":
+        rows, column_mapping = parse_xls_smart(content, index_mapping_override=index_override)
+    elif fmt == "xlsx":
+        try:
+            rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+        except Exception as e:
+            # Common when a CSV is mislabeled as .xls/.xlsx or the client sends wrong format.
+            if "zip file" in str(e).lower():
+                rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
+            else:
+                raise
     else:
         # Try by content
         if content[:4] == b"PK\x03\x04":
-            rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+            try:
+                rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+            except Exception as e:
+                if "zip file" in str(e).lower():
+                    rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
+                else:
+                    raise
         else:
             rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
     
@@ -68,7 +88,13 @@ async def preview_transactions(
         acc = get_account(db, current_user.id, accountId)
         account_name = acc["name"] if acc else accountId
     
-    # Apply auto-classification to preview
+    # Apply auto-classification to preview (type + category with LLM auto-register)
+    if db:
+        for r in rows:
+            if r.get("date") and r.get("description") and not r.get("type"):
+                r["type"] = auto_detect_type(r.get("amount", 0), r.get("description", ""))
+        await enrich_categories_for_rows(db, current_user.id, rows)
+
     preview_rows = []
     for i, row in enumerate(rows):
         if not row.get("date") or not row.get("description"):
@@ -81,10 +107,6 @@ async def preview_transactions(
         # Auto-detect type if not provided
         if not row.get("type"):
             row["type"] = auto_detect_type(amount, description)
-        
-        # Auto-classify category if not provided
-        if not row.get("category") and db:
-            row["category"] = auto_classify_category(db, current_user.id, description, amount)
         
         row["account"] = account
         
@@ -114,7 +136,7 @@ async def upload_transactions(
     skipDuplicates: Optional[bool] = Form(True),
     toleranceDays: Optional[int] = Form(0),
     current_user: User = Depends(get_current_user),
-    db: DbSession = None,
+    db: DbSession = ...,
 ):
     """
     Import transactions from CSV or XLSX with smart parsing and auto-classification.
@@ -135,6 +157,8 @@ async def upload_transactions(
     try:
         if fmt in ("csv", "txt"):
             headers, samples = extract_csv_headers_and_samples(content)
+        elif fmt == "xls":
+            headers, samples = extract_xls_headers_and_samples(content)
         else:
             headers, samples = extract_xlsx_headers_and_samples(content)
         if db and headers:
@@ -146,12 +170,33 @@ async def upload_transactions(
     # Use smart parser
     if fmt in ("csv", "txt"):
         rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
-    elif fmt in ("xlsx", "xls"):
-        rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+    elif fmt == "xls":
+        rows, column_mapping = parse_xls_smart(content, index_mapping_override=index_override)
+    elif fmt == "xlsx":
+        try:
+            rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+        except Exception as e:
+            # If it's not a zip, it's very commonly a legacy .xls (or mislabeled).
+            if "zip file" in str(e).lower():
+                try:
+                    rows, column_mapping = parse_xls_smart(content, index_mapping_override=index_override)
+                except Exception:
+                    rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
+            else:
+                raise
     else:
         # Try by content
         if content[:4] == b"PK\x03\x04":
-            rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+            try:
+                rows, column_mapping = parse_xlsx_smart(content, index_mapping_override=index_override)
+            except Exception as e:
+                if "zip file" in str(e).lower():
+                    try:
+                        rows, column_mapping = parse_xls_smart(content, index_mapping_override=index_override)
+                    except Exception:
+                        rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
+                else:
+                    raise
         else:
             rows, column_mapping = parse_csv_smart(content, index_mapping_override=index_override)
     
@@ -161,12 +206,19 @@ async def upload_transactions(
     account_name = acc["name"] if acc else accountId
     
     # Import with auto-classification and duplicate detection
+    # 1) pre-enrich rows with type + category (LLM auto-register new categories)
+    for r in rows:
+        if r.get("date") and r.get("description") and not r.get("type"):
+            r["type"] = auto_detect_type(r.get("amount", 0), r.get("description", ""))
+    if db:
+        await enrich_categories_for_rows(db, current_user.id, rows)
+
     result = import_transactions(
         db,
         current_user.id,
         rows,
         account_name,
-        auto_classify=True,
+        auto_classify=False,  # already enriched above (prevents overriding)
         skip_duplicates=skipDuplicates if skipDuplicates is not None else True,
         tolerance_days=toleranceDays if toleranceDays is not None else 0,
     )

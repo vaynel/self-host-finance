@@ -50,15 +50,29 @@ class DebugMiddleware(BaseHTTPMiddleware):
 
 # CORS
 origins = [o.strip() for o in _config.cors_origin.split(",") if o.strip()]
-logger.info("CORS allow_origins: %s", origins)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+
+# 개발 환경에서는 접속 IP(로컬/사설망)가 바뀌기 쉬워 CORS로 인해 화면이 비정상(무한 로딩/깜박임)처럼 보이는 케이스가 잦습니다.
+# 토큰은 Authorization 헤더로 전달하므로(쿠키 기반 아님) dev에서는 credentials 없이 모든 Origin을 허용합니다.
+if _config.env == "development":
+    logger.info("CORS (dev) allow_origin_regex: .* (allow_credentials=False)")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+else:
+    logger.info("CORS allow_origins: %s", origins)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 app.add_middleware(DebugMiddleware)
 
 

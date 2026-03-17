@@ -11,7 +11,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
@@ -402,6 +402,7 @@ export default function Accounts() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>계좌 추가</DialogTitle>
+            <DialogDescription className="sr-only">새 계좌 정보를 입력합니다.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -445,6 +446,7 @@ export default function Accounts() {
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>계좌 삭제</DialogTitle>
+            <DialogDescription className="sr-only">계좌 삭제 확인 다이얼로그입니다.</DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground py-2">
             <span className="font-medium text-foreground">{deleteTarget?.name}</span> 계좌를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
@@ -463,6 +465,7 @@ export default function Accounts() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>계좌 이체</DialogTitle>
+            <DialogDescription className="sr-only">출금/입금 계좌와 이체 금액을 설정합니다.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">

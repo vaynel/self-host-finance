@@ -7,6 +7,7 @@ from app.models.investment import InvestmentTrade
 from app.models.settings import UserSettings
 from app.models.category_keyword import CategoryKeyword
 from app.models.parsing_strategy import ParsingStrategy
+from app.models.category import Category
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "UserSettings",
     "CategoryKeyword",
     "ParsingStrategy",
+  "Category",
 ]

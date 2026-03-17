@@ -127,8 +127,9 @@ def import_transactions(
         if not row.get("type") or auto_classify:
             row["type"] = auto_detect_type(amount, description)
         
-        # Auto-classify category if not provided
-        if not row.get("category") or auto_classify:
+        # Auto-classify category only if missing.
+        # (LLM enrichment / registered-category logic is handled in upload router before calling this.)
+        if auto_classify and not row.get("category"):
             row["category"] = auto_classify_category(db, user_id, description, amount)
         
         row["account"] = account
