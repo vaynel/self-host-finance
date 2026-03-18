@@ -23,6 +23,8 @@ class TradeCreate(BaseModel):
     shares: float
     price: float
     fee: Optional[float] = 0
+    # 현금(주문 결제)용 계좌. 지정하지 않으면 백엔드에서 기본 계좌를 선택합니다.
+    accountId: Optional[str] = None
 
     @field_validator("action")
     @classmethod

@@ -150,19 +150,31 @@ export default function Reports() {
                 <PieChart>
                   <Pie data={categorySpending} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value" isAnimationActive={false}>
                     {categorySpending.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
+                      <Cell key={i} fill={entry.color} stroke="hsl(var(--border))" strokeWidth={1.5} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [formatKRW(v)]} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      color: "hsl(var(--card-foreground))",
+                    }}
+                    formatter={(v: number) => [formatKRW(v)]}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="grid grid-cols-2 gap-1.5 mt-2">
               {categorySpending.map((cat) => (
-                <div key={cat.name} className="flex items-center gap-2 text-xs">
-                  <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-                  <span className="text-muted-foreground truncate">{cat.name}</span>
-                  <span className="font-mono ml-auto">{formatKRW(cat.value)}</span>
+                <div key={cat.name} className="flex items-center gap-2 text-sm">
+                  <div
+                    className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: cat.color, boxShadow: "0 0 0 2px hsl(var(--card))" }}
+                  />
+                  <span className="text-foreground/80 truncate">{cat.name}</span>
+                  <span className="font-mono ml-auto font-medium text-foreground">{formatKRW(cat.value)}</span>
                 </div>
               ))}
             </div>

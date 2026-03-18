@@ -56,7 +56,8 @@ async def enrich_categories_for_rows(
 
         # 2) keyword-based
         kw_cat = _norm(auto_classify_category(db, user_id, desc, amount)) if desc else ""
-        if kw_cat and kw_cat.lower() in registered_lc:
+        # If keyword classifier returns "기타", treat it as low-confidence and allow LLM step.
+        if kw_cat and kw_cat != "기타" and kw_cat.lower() in registered_lc:
             row["category"] = registered_lc[kw_cat.lower()]
             continue
         if kw_cat and kw_cat.lower() not in registered_lc and kw_cat != "기타":
@@ -100,9 +101,7 @@ async def enrich_categories_for_rows(
                 max_tokens=200,
             )
             content = resp["choices"][0]["message"]["content"]
-            import json
-
-            data = json.loads(content)
+            data = GroqClient._loads_json_object_loose(content)
             proposed = _norm(str(data.get("category") or ""))
             if proposed:
                 # normalize to existing if matches case-insensitively

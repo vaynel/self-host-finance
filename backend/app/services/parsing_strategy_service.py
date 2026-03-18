@@ -70,6 +70,25 @@ def mapping_to_index_map(headers: list[str], mapping: dict[str, Any]) -> dict[st
         else:
             idx_map[key] = None
 
+    # Post-fixups for common Korean bank exports:
+    # - "거래점/지점" is a branch, not an account name. If LLM mapped it to account, move it to memo instead.
+    def _hdr_at(i: Optional[int]) -> str:
+        if i is None or i < 0 or i >= len(headers):
+            return ""
+        return _normalize_header(headers[i])
+
+    acc_hdr = _hdr_at(idx_map.get("account"))
+    if acc_hdr and ("거래점" in acc_hdr or "지점" in acc_hdr or "branch" in acc_hdr):
+        if idx_map.get("memo") is None:
+            idx_map["memo"] = idx_map.get("account")
+        idx_map["account"] = None
+
+    # If LLM mapped description to "적요"(kind) and memo to "내용"(details), swap them.
+    desc_hdr = _hdr_at(idx_map.get("description"))
+    memo_hdr = _hdr_at(idx_map.get("memo"))
+    if desc_hdr and memo_hdr and ("적요" in desc_hdr) and ("내용" in memo_hdr or "거래내용" in memo_hdr):
+        idx_map["description"], idx_map["memo"] = idx_map["memo"], idx_map["description"]
+
     return idx_map
 
 
@@ -134,7 +153,7 @@ async def infer_strategy_with_llm(
         max_tokens=1200,
     )
     content = resp["choices"][0]["message"]["content"]
-    return json.loads(content)
+    return GroqClient._loads_json_object_loose(content)
 
 
 async def get_or_create_strategy(

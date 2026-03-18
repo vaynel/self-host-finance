@@ -132,6 +132,8 @@ export default function UploadPage() {
     },
   });
 
+  const isBusy = previewMutation.isPending || uploadMutation.isPending;
+
   const handleFileSelect = (file: File) => {
     const validExtensions = [".csv", ".xlsx", ".xls", ".txt"];
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
@@ -229,7 +231,32 @@ export default function UploadPage() {
 
   return (
     <AppLayout title="데이터 업로드">
-      <div className="space-y-6 max-w-4xl">
+      {/* Upload/preview request overlay */}
+      {isBusy && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm"
+          role="status"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div className="w-[min(520px,92vw)] rounded-xl border border-border/60 bg-card/90 p-6 shadow-xl">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">
+                  {uploadMutation.isPending ? "업로드 처리 중..." : "미리보기 생성 중..."}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">잠시만 기다려 주세요. 파일을 분석하고 있습니다.</p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <Progress value={50} className="h-2" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-6 max-w-4xl" aria-disabled={isBusy}>
         {/* CSV/Excel 업로드 섹션 */}
         <Card className="p-6 glass-card">
           <h3 className="text-sm font-semibold mb-4">파일 업로드</h3>
@@ -241,7 +268,7 @@ export default function UploadPage() {
               isDragging
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-primary/50",
-              uploadMutation.isPending && "opacity-50 pointer-events-none"
+              isBusy && "opacity-50 pointer-events-none"
             )}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}

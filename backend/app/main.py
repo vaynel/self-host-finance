@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
 from app.routers import auth, transactions, accounts, investments, reports, upload, settings as settings_router, category_keywords, parsing_strategies
+from app.services.investment_price_updater import start_investment_price_updater_if_needed
 
 logger = logging.getLogger("finflow.debug")
 logging.basicConfig(level=logging.DEBUG)
@@ -24,6 +25,12 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    # Background investment price updater (5~10분 주기) - 요청에 무관하게 시세를 갱신합니다.
+    start_investment_price_updater_if_needed()
 
 # Debug middleware (클래스 먼저 정의)
 class DebugMiddleware(BaseHTTPMiddleware):

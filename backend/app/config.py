@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_model: str = "llama3-8b-8192"
 
+    # Stock price update
+    # - used by background updater for investment price refresh
+    stock_price_provider: str = "stooq"  # stooq (default)
+    stock_price_update_interval_seconds: int = 600  # 10 minutes
+    stock_price_prune_days: int = 7  # daily history retention (prune)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

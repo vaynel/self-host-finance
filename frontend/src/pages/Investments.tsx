@@ -54,6 +54,7 @@ function StockDailyChart({ ticker, name, avgPrice }: { ticker: string; name: str
       const response = await investmentsApi.getPrices(ticker, "30d");
       return response.data || [];
     },
+    refetchInterval: 10 * 60 * 1000, // 10분 주기로 일별 시세(저장된 daily close) 갱신
   });
 
   const data = useMemo(() => {
@@ -123,6 +124,7 @@ export default function Investments() {
       const response = await investmentsApi.getHoldings();
       return response.data || [];
     },
+    refetchInterval: 5 * 60 * 1000, // 5분 주기로 현재가/평가액 갱신
   });
 
   // 거래 내역 조회
@@ -132,6 +134,7 @@ export default function Investments() {
       const response = await investmentsApi.getTrades();
       return response.data || [];
     },
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const holdings = useMemo(() => {

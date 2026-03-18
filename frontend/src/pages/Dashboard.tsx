@@ -229,7 +229,12 @@ export default function Dashboard() {
                     isAnimationActive={false}
                   >
                     {categorySpending.slice(0, 5).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.color}
+                        stroke="hsl(var(--border))"
+                        strokeWidth={1.5}
+                      />
                     ))}
                   </Pie>
                   <Tooltip
@@ -238,6 +243,7 @@ export default function Dashboard() {
                       border: "1px solid hsl(var(--border))",
                       borderRadius: "8px",
                       fontSize: "12px",
+                      color: "hsl(var(--card-foreground))",
                     }}
                     formatter={(value: number) => [formatKRWFull(value)]}
                   />
@@ -246,12 +252,15 @@ export default function Dashboard() {
             </div>
             <div className="space-y-1.5 mt-2">
               {categorySpending.slice(0, 5).map((cat, index) => (
-                <div key={`${cat.name || "category"}-${index}`} className="flex items-center justify-between text-xs">
+                <div key={`${cat.name || "category"}-${index}`} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                    <span className="text-muted-foreground">{cat.name}</span>
+                    <div
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: cat.color, boxShadow: "0 0 0 2px hsl(var(--card))" }}
+                    />
+                    <span className="text-foreground/80">{cat.name}</span>
                   </div>
-                  <span className="font-mono font-medium">{formatKRW(cat.value)}</span>
+                  <span className="font-mono font-medium text-foreground">{formatKRW(cat.value)}</span>
                 </div>
               ))}
             </div>

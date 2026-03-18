@@ -177,6 +177,8 @@ def detect_column_mapping(headers: list[str]) -> dict[str, Optional[int]]:
         "date": None,
         "description": None,
         "amount": None,
+        "deposit": None,
+        "withdraw": None,
         "type": None,
         "category": None,
         "account": None,
@@ -199,18 +201,35 @@ def detect_column_mapping(headers: list[str]) -> dict[str, Optional[int]]:
             break
     
     # Description column detection
-    desc_patterns = ["내역", "거래내역", "description", "적요", "거래적요", "내용", "거래내용", "메모", "비고", "적요명"]
+    # Prefer "내용/거래내용" (merchant/details) over "적요" (kind like 체크카드/인터넷뱅킹)
+    desc_primary_patterns = ["내용", "거래내용", "사용처", "가맹점", "상세", "detail"]
+    desc_fallback_patterns = ["내역", "거래내역", "description", "적요", "거래적요", "적요명"]
     for idx, norm, orig in normalized_headers:
-        if any(pattern in norm for pattern in desc_patterns):
+        if any(pattern in norm for pattern in desc_primary_patterns):
             mapping["description"] = idx
             break
+    if mapping["description"] is None:
+        for idx, norm, orig in normalized_headers:
+            if any(pattern in norm for pattern in desc_fallback_patterns):
+                mapping["description"] = idx
+                break
     
     # Amount column detection
-    amount_patterns = ["금액", "amount", "거래금액", "입금", "출금", "수입", "지출", "변동금액"]
+    # Prefer split columns if present (입금/출금). Otherwise fall back to a single 금액 column.
     for idx, norm, orig in normalized_headers:
-        if any(pattern in norm for pattern in amount_patterns):
-            mapping["amount"] = idx
+        if "입금" in norm or "deposit" in norm or "credit" in norm:
+            mapping["deposit"] = idx
             break
+    for idx, norm, orig in normalized_headers:
+        if "출금" in norm or "withdraw" in norm or "debit" in norm:
+            mapping["withdraw"] = idx
+            break
+    if mapping["deposit"] is None and mapping["withdraw"] is None:
+        amount_patterns = ["금액", "amount", "거래금액", "변동금액", "수입", "지출"]
+        for idx, norm, orig in normalized_headers:
+            if any(pattern in norm for pattern in amount_patterns):
+                mapping["amount"] = idx
+                break
     
     # Balance column detection (optional)
     balance_patterns = ["잔액", "balance", "거래후잔액", "잔고"]
@@ -239,6 +258,14 @@ def detect_column_mapping(headers: list[str]) -> dict[str, Optional[int]]:
         if any(pattern in norm for pattern in account_patterns):
             mapping["account"] = idx
             break
+
+    # Shorthand: many bank exports have "거래점/지점" which is not an account name.
+    # If present and memo is empty, use it as memo instead of account.
+    if mapping["memo"] is None:
+        for idx, norm, orig in normalized_headers:
+            if "거래점" in norm or "지점" in norm or "branch" in norm:
+                mapping["memo"] = idx
+                break
     
     # Memo column detection (optional)
     memo_patterns = ["메모", "memo", "비고", "참고", "기타"]
@@ -288,6 +315,52 @@ def parse_amount(value: Any) -> float:
         return -amount if is_negative else amount
     except (ValueError, TypeError):
         return 0.0
+
+
+def compute_amount_from_mapping(row: list[Any], mapping: dict[str, Optional[int]]) -> float:
+    """
+    Compute canonical amount.
+    - If deposit/withdraw are present, amount = deposit - withdraw (withdraw treated as expense).
+    - Else, use single amount column.
+    """
+    dep_idx = mapping.get("deposit")
+    wdr_idx = mapping.get("withdraw")
+    if dep_idx is not None or wdr_idx is not None:
+        dep = parse_amount(row[dep_idx]) if dep_idx is not None and dep_idx < len(row) else 0.0
+        wdr = parse_amount(row[wdr_idx]) if wdr_idx is not None and wdr_idx < len(row) else 0.0
+        # Some exports encode withdraw as negative already; normalize to positive before subtract
+        wdr = abs(wdr)
+        dep = abs(dep)
+        return dep - wdr
+
+    amt_idx = mapping.get("amount")
+    if amt_idx is not None and amt_idx < len(row):
+        return parse_amount(row[amt_idx])
+    return 0.0
+
+
+def compute_type_from_mapping(row: list[Any], mapping: dict[str, Optional[int]], amount: float) -> Optional[str]:
+    """
+    Best-effort type inference when the source format explicitly separates deposit/withdraw.
+    """
+    dep_idx = mapping.get("deposit")
+    wdr_idx = mapping.get("withdraw")
+    if dep_idx is None and wdr_idx is None:
+        return None
+    dep = parse_amount(row[dep_idx]) if dep_idx is not None and dep_idx < len(row) else 0.0
+    wdr = parse_amount(row[wdr_idx]) if wdr_idx is not None and wdr_idx < len(row) else 0.0
+    dep = abs(dep)
+    wdr = abs(wdr)
+    if dep > 0 and wdr == 0:
+        return "income"
+    if wdr > 0 and dep == 0:
+        return "expense"
+    # ambiguous (both present) -> fall back to amount sign
+    if amount > 0:
+        return "income"
+    if amount < 0:
+        return "expense"
+    return None
 
 
 def parse_date(value: Any) -> Optional[str]:
@@ -361,8 +434,10 @@ def parse_csv_smart(
         
         date_val = parse_date(row[mapping["date"]]) if mapping["date"] is not None and mapping["date"] < len(row) else None
         description = str(row[mapping["description"]]).strip() if mapping["description"] is not None and mapping["description"] < len(row) else ""
-        amount_val = parse_amount(row[mapping["amount"]]) if mapping.get("amount") is not None and mapping["amount"] < len(row) else 0.0
+        amount_val = compute_amount_from_mapping(row, mapping)
         type_val = str(row[mapping["type"]]).strip().lower() if mapping["type"] is not None and mapping["type"] < len(row) else None
+        if not type_val:
+            type_val = compute_type_from_mapping(row, mapping, amount_val)
         category_val = str(row[mapping["category"]]).strip() if mapping["category"] is not None and mapping["category"] < len(row) else None
         account_val = str(row[mapping["account"]]).strip() if mapping["account"] is not None and mapping["account"] < len(row) else None
         memo_val = str(row[mapping["memo"]]).strip() if mapping["memo"] is not None and mapping["memo"] < len(row) else None
@@ -388,8 +463,10 @@ def parse_csv_smart(
         # Extract values using mapping
         date_val = parse_date(row[mapping["date"]]) if mapping["date"] is not None and mapping["date"] < len(row) else None
         description = str(row[mapping["description"]]).strip() if mapping["description"] is not None and mapping["description"] < len(row) else ""
-        amount_val = parse_amount(row[mapping["amount"]]) if mapping.get("amount") is not None and mapping["amount"] < len(row) else 0.0
+        amount_val = compute_amount_from_mapping(row, mapping)
         type_val = str(row[mapping["type"]]).strip().lower() if mapping["type"] is not None and mapping["type"] < len(row) else None
+        if not type_val:
+            type_val = compute_type_from_mapping(row, mapping, amount_val)
         category_val = str(row[mapping["category"]]).strip() if mapping["category"] is not None and mapping["category"] < len(row) else None
         account_val = str(row[mapping["account"]]).strip() if mapping["account"] is not None and mapping["account"] < len(row) else None
         memo_val = str(row[mapping["memo"]]).strip() if mapping["memo"] is not None and mapping["memo"] < len(row) else None
@@ -447,8 +524,11 @@ def parse_xlsx_smart(
         # Extract values using mapping
         date_val = parse_date(row[mapping["date"]]) if mapping["date"] is not None and mapping["date"] < len(row) else None
         description = str(row[mapping["description"]]).strip() if mapping["description"] is not None and mapping["description"] < len(row) else ""
-        amount_val = parse_amount(row[mapping["amount"]]) if mapping["amount"] is not None and mapping["amount"] < len(row) else 0.0
+        row_list = list(row)
+        amount_val = compute_amount_from_mapping(row_list, mapping)
         type_val = str(row[mapping["type"]]).strip().lower() if mapping["type"] is not None and mapping["type"] < len(row) else None
+        if not type_val:
+            type_val = compute_type_from_mapping(row_list, mapping, amount_val)
         category_val = str(row[mapping["category"]]).strip() if mapping["category"] is not None and mapping["category"] < len(row) else None
         account_val = str(row[mapping["account"]]).strip() if mapping["account"] is not None and mapping["account"] < len(row) else None
         memo_val = str(row[mapping["memo"]]).strip() if mapping["memo"] is not None and mapping["memo"] < len(row) else None
@@ -505,8 +585,10 @@ def parse_xls_smart(
 
         date_val = parse_date(row_vals[mapping["date"]]) if mapping["date"] is not None and mapping["date"] < len(row_vals) else None
         description = str(row_vals[mapping["description"]]).strip() if mapping["description"] is not None and mapping["description"] < len(row_vals) else ""
-        amount_val = parse_amount(row_vals[mapping["amount"]]) if mapping["amount"] is not None and mapping["amount"] < len(row_vals) else 0.0
+        amount_val = compute_amount_from_mapping(row_vals, mapping)
         type_val = str(row_vals[mapping["type"]]).strip().lower() if mapping["type"] is not None and mapping["type"] < len(row_vals) else None
+        if not type_val:
+            type_val = compute_type_from_mapping(row_vals, mapping, amount_val)
         category_val = str(row_vals[mapping["category"]]).strip() if mapping["category"] is not None and mapping["category"] < len(row_vals) else None
         account_val = str(row_vals[mapping["account"]]).strip() if mapping["account"] is not None and mapping["account"] < len(row_vals) else None
         memo_val = str(row_vals[mapping["memo"]]).strip() if mapping["memo"] is not None and mapping["memo"] < len(row_vals) else None

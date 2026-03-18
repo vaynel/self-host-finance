@@ -286,6 +286,7 @@ export interface InvestmentTradeCreate {
   shares: number;
   price: number;
   fee?: number;
+  accountId?: string;
 }
 
 export interface InvestmentPrice {

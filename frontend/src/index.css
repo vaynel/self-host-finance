@@ -51,10 +51,18 @@
     --sidebar-border: 220 20% 18%;
     --sidebar-ring: 172 66% 50%;
 
-    --chart-income: 172 66% 40%;
-    --chart-expense: 0 72% 55%;
-    --chart-investment: 262 60% 55%;
-    --chart-savings: 38 92% 50%;
+    /* Chart palette (WCAG-friendly, not pure red/green). */
+    --chart-income: 173 45% 35%; /* muted teal */
+    --chart-expense: 24 80% 45%; /* muted orange-red */
+    --chart-investment: 262 55% 48%; /* muted purple */
+    --chart-savings: 48 95% 45%; /* yellow/orange */
+
+    /* Category pie palette (color-blind friendly). */
+    --chart-1: 210 90% 40%; /* blue */
+    --chart-2: 28 90% 50%; /* orange */
+    --chart-3: 195 90% 40%; /* sky */
+    --chart-4: 145 45% 35%; /* green */
+    --chart-5: 320 55% 45%; /* purple */
   }
 
   .dark {
@@ -101,10 +109,17 @@
     --sidebar-border: 222 25% 14%;
     --sidebar-ring: 172 66% 50%;
 
-    --chart-income: 172 66% 50%;
-    --chart-expense: 0 72% 60%;
+    --chart-income: 173 55% 50%;
+    --chart-expense: 18 85% 55%;
     --chart-investment: 262 60% 60%;
-    --chart-savings: 38 92% 55%;
+    --chart-savings: 48 95% 60%;
+
+    /* Category pie palette (dark). */
+    --chart-1: 210 90% 55%;
+    --chart-2: 28 90% 60%;
+    --chart-3: 195 90% 52%;
+    --chart-4: 145 45% 50%;
+    --chart-5: 320 55% 58%;
   }
 }
 
