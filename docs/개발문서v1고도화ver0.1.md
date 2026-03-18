@@ -112,20 +112,25 @@
 
 ### 3.7 Investments
 
-현재 투자 기능은 “자동매매 엔진/브로커 API 연동”이 아니라, **trade 기록 + 현금 정산 + 시세 갱신(외부 provider) + 차트용 일별 close 저장** 중심으로 구현되어 있습니다.
+v1 투자 기능은 **trade 기록**을 기준으로 포트폴리오를 구성하고, **현금(계좌) 정산은 주식 주문의 체결 결과를 기반으로** 반영하도록 설계합니다.
+
+또한 시세/보유 동기화는 **한국투자증권 OpenAPI(KIS)** 를 사용하는 방향으로 고도화합니다. (즉, 이전의 외부 시세 provider 개념은 “KIS quote/잔고 데이터”로 교체)
 
 - `GET /v1/investments/holdings`
-  - 보유 종목을 `InvestmentTrade`로 집계
-  - 현재가는 `InvestmentPriceLatest`에서 조회(없으면 평균단가 기반 fallback)
+  - 브로커(KIS) 보유 데이터 동기화 결과를 기준으로 보유 종목/수량을 구성
+  - 평균단가/평가손익 계산 후, 현재가는 `investment_price_latest`(또는 KIS에서 즉시 조회한 값)를 사용
 - `GET /v1/investments/trades?ticker=&action=&startDate=&endDate=`
   - 투자 거래 목록
 - `GET /v1/investments/prices/{ticker}?period=30d|...`
-  - 일별 close 기반 가격 히스토리(프론트 차트 호환 필드: `date/open/high/low/close/volume`)
+  - KIS로 수집한 일별 close 기반 가격 히스토리(프론트 차트 호환 필드: `date/open/high/low/close/volume`)
 - `POST /v1/investments/trades`
   - buy/sell trade 생성
-  - `accountId`를 지정하면 해당 계좌를 현금 정산용으로 사용(없으면 백엔드에서 우선순위 계좌를 선택)
+  - `accountId`를 지정하면 “주문 체결 시” 정산할 현금 계좌로 사용
 - `POST /v1/investments/prices/refresh`
-  - `ticker`가 있으면 특정 종목, 없으면 “사용자가 트래킹 중인 모든 tickers” 대상으로 1회 수동 갱신
+  - `ticker`가 있으면 해당 종목만 KIS quote로 즉시 갱신
+  - 없으면 “사용자가 트래킹 중인 모든 tickers” 대상으로 갱신
+- `POST /v1/investments/prices/refresh`
+  - (동일) 수동 가격 갱신 엔드포인트
 
 ---
 
@@ -182,21 +187,20 @@ LLM이 자주 하는 실수를 방어하기 위해 아래 보정이 포함됩니
 
 - `investment_price_updater_loop()`가 `Settings.stock_price_update_interval_seconds` 주기로 실행
 - tickers는 `InvestmentTrade`에서 distinct `(user_id, ticker)`를 기반으로 갱신(기본 동작)
+- 가격 소스는 **한국투자증권 OpenAPI(KIS) quote API** 를 통해 가져오도록 교체
 - 갱신 결과는 다음 두 테이블에 저장
   - `investment_price_latest`: 가장 최근 가격(현재가 계산용)
   - `investment_price_daily`: 일별 close(차트용 히스토리)
 - 오래된 일별 데이터는 `Settings.stock_price_prune_days` 기준으로 prune(삭제)합니다.
 
-`stock_price_provider.py`:
+KIS 사용 시 핵심 포인트:
 
-- 현재 provider 기본은 `stooq`
-- ticker 변환 규칙 예시
-  - `.`이 없으면 `.<market>` 형태를 stooq 관례(`.us`)로 붙이는 방식으로 단순 처리
-- provider는 Stooq CSV 응답을 마지막 row의 `Close` 값으로 현재가/close를 계산합니다.
+- tickers(프론트 표기 예: `005930.KS`)를 KIS 입력값(종목코드, 시장구분 등)으로 변환하는 로직이 필요합니다.
+- KIS quote 호출 실패/누락 시에는 기존 캐시(`InvestmentPriceLatest`) 값을 유지하도록 “fail-safe” 처리가 필요합니다.
 
 ### 4.5 투자: trade 생성 시 현금 계정 정산(기존 거래/계좌와 연결)
 
-`InvestmentService.create_trade(...)`는 buy/sell trade 생성과 동시에 현금 정산을 수행합니다.
+`InvestmentService.create_trade(...)`는 buy/sell trade를 생성하고, 이후 **KIS 주문 체결 결과**에 따라 현금 정산을 반영하도록 설계합니다.
 
 - 입력: `TradeCreate`에 `accountId`(선택) 포함
 - 정산 대상 계좌 우선순위:
@@ -204,16 +208,20 @@ LLM이 자주 하는 실수를 방어하기 위해 아래 보정이 포함됩니
   2) 없으면 `Account.type == "investment"` 중 1개
   3) 없으면 `Account.type == "bank"` 중 1개
   4) 둘 다 없으면 404
-- 정산 로직(핵심):
+- 주문 체결 기반 정산 로직(핵심):
   - buy:
-    - cash_delta = `-(shares * price + fee)`
+    - (체결 시점) cash_delta = `-(체결금액 + 수수료)`
     - `transactions`에 type=`expense`, category=`투자` 기록
   - sell:
-    - cash_delta = `shares * price - fee`
+    - (체결 시점) cash_delta = `체결금액 - 수수료`
     - `transactions`에 type=`income`, category=`투자` 기록
-- 이후 `cash_account.balance += cash_delta` 후 커밋
+- 정산 타이밍은 “주문 생성 시”가 아니라 “KIS 주문 체결/확정 시”로 이동하는 것이 목표입니다.
+  - 이유: 부분체결/정정/취소 등 브로커 특성을 반영해야 실제 계정 잔액과 어긋나지 않습니다.
 
-이 연결 덕분에 “주식을 팔았는데 돈이 계정에 반영되지 않는 문제”를 방지합니다.
+추가로 문서상 필수 데이터(향후 DB 스키마/모델에 반영 예정):
+- broker order id (KIS 주문번호)
+- 주문 상태(접수/체결/취소/실패)
+- 체결 수량/체결 단가/수수료/체결 시각
 
 ---
 
@@ -244,12 +252,17 @@ LLM이 자주 하는 실수를 방어하기 위해 아래 보정이 포함됩니
 
 ## 7. (중요) 현재 v1에서 “아직 없음”으로 문서에 명시할 것
 
-기존 문서에서 언급되었던 다음 항목들은 현재 구현 범위에 포함되어 있지 않습니다.
+아래 항목들은 “v1 고도화 목표(한국투자증권 OpenAPI 기반)”에 포함되지만, 현재 레포 코드 기준으로는 완전 구현이 아닙니다.
 
-- 증권사별 브로커 API 연동(자동 주문/체결, 한국투자증권 Open API 등)
-- 자동매매 엔진/규칙 실행(주문 테스트/로그/알림 시스템)
+- KIS 기반 보유/잔고 동기화(holdings 구성에 KIS 데이터를 사용하는 단계)
+- KIS 주문 생성 및 주문 상태/체결 이벤트 폴링(또는 웹훅) 기반 정산 트리거
+- KIS 토큰/인증 정보 저장 및 갱신(브로커 OAuth 흐름)
+- 프론트 ticker 표기(`005930.KS` 등) <-> KIS 입력값 변환(종목코드/시장구분 매핑)
 
-현재 v1의 투자 기능은 “trade 기록 + 현금 정산 + 시세 provider 기반 갱신 + 차트용 히스토리 저장”까지만 포함됩니다.
+참고: 현재 코드에는 가격 갱신 루프와 차트용 가격 테이블 구조가 존재하지만, 가격 공급원은 문서 목표(“KIS quote”)로 교체해야 합니다.
+
+현재 v1의 투자 기능은 “trade 기록 + 현금 ledger 반영(정산 흐름 포함) + 가격 히스토리 제공”까지 형태가 갖춰져 있으며,
+이 정산 흐름을 KIS 체결 기반으로 정확히 이동하는 것이 이번 v1 고도화의 핵심입니다.
 
 ---
 
