@@ -225,7 +225,7 @@ export default function SettingsManagement() {
                   </Badge>
                 )}
               </div>
-            ))}
+          </div>
         </Card>
 
         {/* Discord Webhook */}
