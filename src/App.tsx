@@ -11,6 +11,7 @@ import Investments from "./pages/Investments";
 import Reports from "./pages/Reports";
 import UploadPage from "./pages/Upload";
 import SettingsPage from "./pages/SettingsPage";
+import SettingsManagement from "./pages/SettingsManagement";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 
@@ -33,6 +34,7 @@ function AppRoutes() {
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/settings/mgmt" element={<ProtectedRoute><SettingsManagement /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

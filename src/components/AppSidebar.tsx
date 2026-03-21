@@ -6,6 +6,7 @@ import {
   BarChart3,
   Upload,
   Settings,
+  SlidersHorizontal,
   Wallet,
   LogOut,
   User,
@@ -39,6 +40,7 @@ const mainItems = [
 const toolItems = [
   { title: "데이터 업로드", url: "/upload", icon: Upload },
   { title: "설정", url: "/settings", icon: Settings },
+  { title: "설정 관리", url: "/settings/mgmt", icon: SlidersHorizontal },
 ];
 
 export function AppSidebar() {
