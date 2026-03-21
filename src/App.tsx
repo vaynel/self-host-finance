@@ -11,6 +11,7 @@ import Investments from "./pages/Investments";
 import Reports from "./pages/Reports";
 import UploadPage from "./pages/Upload";
 import SettingsPage from "./pages/SettingsPage";
+import SettingsManagement from "./pages/SettingsManagement";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 
