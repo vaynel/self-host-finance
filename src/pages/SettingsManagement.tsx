@@ -189,61 +189,43 @@ export default function SettingsManagement() {
             </Button>
           </div>
 
-          {/* Category List */}
-          <div className="space-y-1">
-            {(["income", "expense", "transfer"] as const).map((type) => {
-              const typeCats = categories.filter((c) => c.type === type);
-              if (typeCats.length === 0) return null;
-              return (
-                <div key={type} className="space-y-1">
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider pt-2">
-                    {typeLabel(type)}
-                  </p>
-                  {typeCats.map((cat) => (
-                    <div
-                      key={cat.id}
-                      className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50 transition-colors group"
-                    >
-                      {editingCatId === cat.id ? (
-                        <div className="flex items-center gap-1.5 flex-1">
-                          <Input
-                            value={editCatName}
-                            onChange={(e) => setEditCatName(e.target.value)}
-                            className="h-7 text-xs flex-1"
-                            onKeyDown={(e) => e.key === "Enter" && saveEditCategory()}
-                            autoFocus
-                          />
-                          <button onClick={saveEditCategory} className="text-primary hover:bg-primary/10 rounded p-1 transition-colors">
-                            <Check className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={() => setEditingCatId(null)} className="text-muted-foreground hover:bg-muted rounded p-1 transition-colors">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                            <span className="text-sm">{cat.name}</span>
-                            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${typeColor(cat.type)}`}>
-                              {typeLabel(cat.type)}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => startEditCategory(cat)} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button onClick={() => deleteCategory(cat.id)} className="p-1 rounded hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive">
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
+          {/* Category List - compact grid */}
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((cat) => (
+              <div key={cat.id} className="group">
+                {editingCatId === cat.id ? (
+                  <div className="flex items-center gap-1 border border-primary rounded-md px-1.5 py-0.5">
+                    <Input
+                      value={editCatName}
+                      onChange={(e) => setEditCatName(e.target.value)}
+                      className="h-6 text-xs w-20 border-0 p-0 focus-visible:ring-0"
+                      onKeyDown={(e) => e.key === "Enter" && saveEditCategory()}
+                      autoFocus
+                    />
+                    <button onClick={saveEditCategory} className="text-primary hover:bg-primary/10 rounded p-0.5">
+                      <Check className="h-3 w-3" />
+                    </button>
+                    <button onClick={() => setEditingCatId(null)} className="text-muted-foreground hover:bg-muted rounded p-0.5">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs gap-1.5 pr-1 cursor-default ${typeColor(cat.type)}`}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                    {cat.name}
+                    <button onClick={() => startEditCategory(cat)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-background/50 transition-opacity">
+                      <Pencil className="h-2.5 w-2.5" />
+                    </button>
+                    <button onClick={() => deleteCategory(cat.id)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/20 text-destructive transition-opacity">
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </Badge>
+                )}
+              </div>
+            ))}
           </div>
         </Card>
 
