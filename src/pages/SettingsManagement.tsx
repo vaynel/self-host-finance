@@ -210,9 +210,8 @@ export default function SettingsManagement() {
                 ) : (
                   <Badge
                     variant="outline"
-                    className={`text-xs gap-1.5 pr-1 cursor-default ${typeColor(cat.type)}`}
+                    className="text-xs gap-1 pr-1 cursor-default"
                   >
-                    <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
                     {cat.name}
                     <button onClick={() => startEditCategory(cat)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-background/50 transition-opacity">
                       <Pencil className="h-2.5 w-2.5" />
