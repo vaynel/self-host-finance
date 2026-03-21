@@ -134,23 +134,6 @@ export default function SettingsManagement() {
     }));
   };
 
-  const typeLabel = (type: string) => {
-    switch (type) {
-      case "income": return "수입";
-      case "expense": return "지출";
-      case "transfer": return "이체";
-      default: return type;
-    }
-  };
-
-  const typeColor = (type: string) => {
-    switch (type) {
-      case "income": return "bg-primary/10 text-primary";
-      case "expense": return "bg-destructive/10 text-destructive";
-      case "transfer": return "bg-muted text-muted-foreground";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
 
   return (
     <AppLayout title="설정 관리">
