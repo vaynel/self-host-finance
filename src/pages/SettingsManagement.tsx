@@ -56,7 +56,7 @@ export default function SettingsManagement() {
   // Category state
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [newCatName, setNewCatName] = useState("");
-  const [newCatType, setNewCatType] = useState<"income" | "expense" | "transfer">("expense");
+  
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editCatName, setEditCatName] = useState("");
 
