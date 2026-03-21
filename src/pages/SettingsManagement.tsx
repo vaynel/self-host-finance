@@ -225,6 +225,7 @@ export default function SettingsManagement() {
                   </Badge>
                 )}
               </div>
+            ))}
           </div>
         </Card>
 
