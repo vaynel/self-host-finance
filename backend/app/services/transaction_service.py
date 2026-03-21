@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 
 from app.models.transaction import Transaction
+from app.models.account import Account
 from app.models.user import User
 from app.core.security import create_txn_id
 from app.core.exceptions import raise_404, raise_403
@@ -67,18 +68,26 @@ def get_transaction(db: Session, user_id: str, txn_id: str) -> Optional[dict]:
 
 def create_transaction(db: Session, user_id: str, data: dict) -> dict:
     """Create transaction."""
+    amount = Decimal(str(data["amount"]))
     t = Transaction(
         id=create_txn_id(),
         user_id=user_id,
         date=date.fromisoformat(data["date"]),
         description=data["description"],
-        amount=Decimal(str(data["amount"])),
+        amount=amount,
         type=data["type"],
         category=data["category"],
         account=data["account"],
         memo=data.get("memo") or "",
     )
     db.add(t)
+
+    # Keep account balance in sync with transaction ledger.
+    # (income:+, expense:-, transfer can be +/- depending on direction)
+    account = db.query(Account).filter(Account.user_id == user_id, Account.name == data["account"]).first()
+    if account:
+        account.balance = account.balance + amount
+
     db.commit()
     db.refresh(t)
     return _txn_to_dict(t)
@@ -89,6 +98,10 @@ def update_transaction(db: Session, user_id: str, txn_id: str, data: dict) -> di
     t = db.query(Transaction).filter(Transaction.id == txn_id, Transaction.user_id == user_id).first()
     if not t:
         raise_404("거래를 찾을 수 없습니다.")
+
+    old_amount = Decimal(str(t.amount))
+    old_account_name = t.account
+
     for k, v in data.items():
         if v is not None:
             if k == "date":
@@ -97,6 +110,19 @@ def update_transaction(db: Session, user_id: str, txn_id: str, data: dict) -> di
                 t.amount = Decimal(str(v))
             else:
                 setattr(t, k, v)
+
+    new_amount = Decimal(str(t.amount))
+    new_account_name = t.account
+
+    # Reconcile account balances: revert old impact, then apply new impact.
+    old_account = db.query(Account).filter(Account.user_id == user_id, Account.name == old_account_name).first()
+    if old_account:
+        old_account.balance = old_account.balance - old_amount
+
+    new_account = db.query(Account).filter(Account.user_id == user_id, Account.name == new_account_name).first()
+    if new_account:
+        new_account.balance = new_account.balance + new_amount
+
     db.commit()
     db.refresh(t)
     return _txn_to_dict(t)
@@ -107,5 +133,11 @@ def delete_transaction(db: Session, user_id: str, txn_id: str) -> None:
     t = db.query(Transaction).filter(Transaction.id == txn_id, Transaction.user_id == user_id).first()
     if not t:
         raise_404("거래를 찾을 수 없습니다.")
+
+    # Revert account balance impact before deletion.
+    account = db.query(Account).filter(Account.user_id == user_id, Account.name == t.account).first()
+    if account:
+        account.balance = account.balance - Decimal(str(t.amount))
+
     db.delete(t)
     db.commit()

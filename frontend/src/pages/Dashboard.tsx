@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { StatCard } from "@/components/StatCard";
 import { Card } from "@/components/ui/card";
-import { Wallet, TrendingDown, TrendingUp, PiggyBank, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
+import {
+  Wallet, TrendingDown, TrendingUp, PiggyBank, ArrowUpRight, ArrowDownRight, Loader2,
+  BellRing, AlertTriangle, BarChart3,
+} from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -37,6 +41,11 @@ function formatKRWFull(value: unknown) {
   const v = toNumberSafe(value);
   return `₩${v.toLocaleString()}`;
 }
+
+const TRIGGER_KIND_LABEL: Record<string, string> = {
+  cost_drop: "원금 대비 하락",
+  peak_drop: "고점 대비 하락",
+};
 
 export default function Dashboard() {
   // API 데이터 페칭
@@ -80,12 +89,38 @@ export default function Dashboard() {
     },
   });
 
+  const { data: ruleTriggers = [] } = useQuery({
+    queryKey: ["investments", "rules", "triggers"],
+    queryFn: async () => (await investmentsApi.listRuleTriggers()).data || [],
+    refetchInterval: 60 * 1000,
+  });
+
+  const { data: dashTickerRules = [] } = useQuery({
+    queryKey: ["investments", "rules", "ticker"],
+    queryFn: async () => (await investmentsApi.listRules()).data || [],
+  });
+
+  const { data: dashGlobalRules = [] } = useQuery({
+    queryKey: ["investments", "rules", "global"],
+    queryFn: async () => (await investmentsApi.listGlobalRules()).data || [],
+  });
+
+  const activeRulesSummary = useMemo(() => ({
+    ticker: dashTickerRules.filter((r) => r.enabled).length,
+    global: dashGlobalRules.filter((r) => r.enabled).length,
+  }), [dashTickerRules, dashGlobalRules]);
+
   const isLoading = transactionsLoading || accountsLoading || holdingsLoading || monthlySummaryLoading || categorySpendingLoading;
 
   // 계산된 값들
   const investmentTotal = useMemo(() => {
     if (!holdingsData) return 0;
     return holdingsData.reduce((sum, h) => sum + h.totalValue, 0);
+  }, [holdingsData]);
+
+  const investmentCostBasis = useMemo(() => {
+    if (!holdingsData) return 0;
+    return holdingsData.reduce((sum, h) => sum + h.avgPrice * h.shares, 0);
   }, [holdingsData]);
 
   const totalAssets = useMemo(() => {
@@ -101,12 +136,47 @@ export default function Dashboard() {
 
   const netWorth = totalAssets - totalLiabilities;
 
-  const thisMonthExpense = useMemo(() => {
-    if (!monthlySummaryData || monthlySummaryData.length === 0) return 0;
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    const thisMonth = monthlySummaryData.find((m) => m.month === currentMonth);
-    return thisMonth?.expense || 0;
+  /** 이번 달·전월 행 (월별 요약 API) */
+  const monthRows = useMemo(() => {
+    const now = new Date();
+    const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const prevD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevYm = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, "0")}`;
+    const rows = monthlySummaryData || [];
+    return {
+      currentYm,
+      prevYm,
+      current: rows.find((m) => m.month === currentYm),
+      prev: rows.find((m) => m.month === prevYm),
+    };
   }, [monthlySummaryData]);
+
+  const thisMonthExpense = useMemo(() => {
+    return monthRows.current?.expense ?? 0;
+  }, [monthRows]);
+
+  /** 지출 전월 대비 % (월별 요약 API) */
+  const expenseChangeMeta = useMemo(() => {
+    const cur = monthRows.current;
+    const p = monthRows.prev;
+    if (!cur || !p || p.expense <= 0) return null;
+    const pct = ((cur.expense - p.expense) / p.expense) * 100;
+    const text = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% 전월 대비 지출`;
+    const changeType = pct <= 0 ? "positive" as const : "negative" as const;
+    return { text, changeType };
+  }, [monthRows]);
+
+  /** 보유 종목 평가·원금 기준 수익률 (holdings API) */
+  const portfolioReturnPct = useMemo(() => {
+    if (!holdingsData?.length || investmentCostBasis <= 0) return null;
+    return ((investmentTotal - investmentCostBasis) / investmentCostBasis) * 100;
+  }, [holdingsData, investmentCostBasis, investmentTotal]);
+
+  /** 총 자산 대비 투자 비중 (계좌·보유 API) */
+  const investShareOfAssetsPct = useMemo(() => {
+    if (totalAssets <= 0) return null;
+    return (investmentTotal / totalAssets) * 100;
+  }, [totalAssets, investmentTotal]);
 
   // 월별 데이터 변환
   const monthlySpending = useMemo(() => {
@@ -118,14 +188,16 @@ export default function Dashboard() {
     }));
   }, [monthlySummaryData]);
 
-  // 카테고리별 소비 데이터 변환
+  // 카테고리별 소비 (/reports/category-spending → category·amount 또는 name·value)
   const categorySpending = useMemo(() => {
     if (!categorySpendingData) return [];
-    return categorySpendingData.map((cat, index) => ({
-      name: cat.name,
-      value: toNumberSafe((cat as any).value),
-      color: cat.color || CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-    }));
+    return categorySpendingData.map(
+      (cat: { category?: string; name?: string; amount?: number; value?: number; color?: string }, index: number) => ({
+        name: cat.category ?? cat.name ?? "기타",
+        value: toNumberSafe(cat.amount ?? cat.value),
+        color: cat.color || CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      }),
+    );
   }, [categorySpendingData]);
 
   const recentTransactions = useMemo(() => {
@@ -150,36 +222,121 @@ export default function Dashboard() {
           <StatCard
             label="총 자산"
             value={formatKRW(totalAssets)}
-            change="+2.3% 전월 대비"
-            changeType="positive"
+            change={
+              investShareOfAssetsPct != null
+                ? `투자 ${investShareOfAssetsPct.toFixed(0)}% · 유동(계좌+) ${(100 - investShareOfAssetsPct).toFixed(0)}%`
+                : undefined
+            }
+            changeType="neutral"
             icon={Wallet}
             iconClassName="bg-accent"
           />
           <StatCard
             label="순자산"
             value={formatKRW(netWorth)}
-            change="+1.8% 전월 대비"
-            changeType="positive"
+            change={
+              monthRows.current
+                ? `이번 달 저축 ${formatKRW(monthRows.current.savings)} · 저축률 ${monthRows.current.savingsRate.toFixed(1)}%`
+                : undefined
+            }
+            changeType="neutral"
             icon={PiggyBank}
             iconClassName="bg-accent"
           />
           <StatCard
             label="이번 달 소비"
             value={formatKRW(thisMonthExpense)}
-            change="-12% 전월 대비"
-            changeType="positive"
+            change={expenseChangeMeta?.text}
+            changeType={expenseChangeMeta?.changeType ?? "neutral"}
             icon={TrendingDown}
             iconClassName="bg-destructive/10"
           />
           <StatCard
             label="투자 자산"
             value={formatKRW(investmentTotal)}
-            change="+5.2% 수익률"
-            changeType="positive"
+            change={
+              portfolioReturnPct != null
+                ? `${portfolioReturnPct >= 0 ? "+" : ""}${portfolioReturnPct.toFixed(2)}% 평가수익률`
+                : holdingsData?.length
+                  ? "원금 대비 계산 불가"
+                  : undefined
+            }
+            changeType={
+              portfolioReturnPct == null
+                ? "neutral"
+                : portfolioReturnPct >= 0
+                  ? "positive"
+                  : "negative"
+            }
             icon={TrendingUp}
             iconClassName="bg-accent"
           />
         </div>
+
+        {/* 투자 룰: 종목별·글로벌 트리거 (Investments와 동일 캐시 키) */}
+        <Card
+          className={cn(
+            "glass-card",
+            ruleTriggers.length > 0 && "border-destructive/35 bg-destructive/[0.06]",
+          )}
+        >
+          <div className="p-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                {ruleTriggers.length > 0 ? (
+                  <BellRing className="h-4 w-4 text-destructive shrink-0 animate-pulse" />
+                ) : (
+                  <BarChart3 className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
+                <h3 className="text-sm font-semibold">투자 알림·매도 룰</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                활성 룰: 종목별{" "}
+                <span className="font-mono text-foreground">{activeRulesSummary.ticker}</span>
+                건 · 글로벌{" "}
+                <span className="font-mono text-foreground">{activeRulesSummary.global}</span>
+                건
+              </p>
+            </div>
+            <Link
+              to="/investments"
+              className="text-xs font-medium text-primary hover:underline shrink-0"
+            >
+              투자 관리에서 설정 →
+            </Link>
+          </div>
+          {ruleTriggers.length === 0 ? (
+            <div className="px-5 pb-5 text-sm text-muted-foreground border-t border-border pt-3">
+              현재 조건을 만족하는 트리거가 없습니다.
+            </div>
+          ) : (
+            <div className="px-5 pb-5 space-y-2 border-t border-border pt-3">
+              {(ruleTriggers as Array<{
+                rule: { id: string; trigger_kind: string; trigger_percent: number };
+                name: string;
+                ticker: string;
+                actual: number;
+              }>).map((item, i) => (
+                <div
+                  key={`${item.rule.id}-${item.ticker}-${i}`}
+                  className="flex items-center justify-between gap-2 text-xs bg-background/60 rounded-lg px-3 py-2 border border-border"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                    <span className="font-medium truncate">{item.name}</span>
+                    <span className="text-muted-foreground truncate hidden sm:inline">
+                      {TRIGGER_KIND_LABEL[item.rule.trigger_kind] ?? item.rule.trigger_kind}{" "}
+                      {item.rule.trigger_percent}%
+                    </span>
+                  </div>
+                  <span className="font-mono text-destructive font-semibold shrink-0">
+                    -{Number(item.actual).toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

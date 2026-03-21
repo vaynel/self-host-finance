@@ -55,7 +55,12 @@ async function apiRequest<T>(
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error?.message || `API 요청 실패: ${response.status}`);
+    const baseMessage = data.error?.message || `API 요청 실패: ${response.status}`;
+    const details = data.error?.details;
+    if (details && Array.isArray(details) && details.length > 0) {
+      return Promise.reject(new Error(`${baseMessage} (details: ${JSON.stringify(details)})`));
+    }
+    throw new Error(baseMessage);
   }
 
   return data;
@@ -266,6 +271,8 @@ export interface InvestmentHolding {
   totalValue: number;
   profitLoss: number;
   profitLossRate: number;
+  source?: "snapshot" | "trade_fallback";
+  accountId?: string;
 }
 
 export interface InvestmentTrade {
@@ -306,6 +313,136 @@ export interface InvestmentListParams {
   endDate?: string;
 }
 
+export interface InvestmentOrder {
+  id: string;
+  ticker: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price?: number | null;
+  order_type: "limit" | "market";
+  broker_order_id?: string | null;
+  status: "pending" | "partially_filled" | "filled" | "cancelled" | "rejected" | "unknown";
+  requested_at: string;
+  filled_at?: string | null;
+}
+
+export interface InvestmentExecution {
+  id: string;
+  broker_execution_id?: string | null;
+  executed_quantity: number;
+  executed_price: number;
+  fee?: number | null;
+  executed_at: string;
+  settled: "no" | "yes" | "error";
+  settled_at?: string | null;
+}
+
+export interface InvestmentOrderDetail extends InvestmentOrder {
+  executions: InvestmentExecution[];
+}
+
+export interface InvestmentOrderCreate {
+  account_id: string;
+  ticker: string;
+  side: "buy" | "sell";
+  quantity: number;
+  price?: number;
+  order_type?: "limit" | "market";
+}
+
+export interface AutoTradeRule {
+  id: string;
+  account_id: string;
+  ticker: string;
+  side: "buy" | "sell";
+  enabled: boolean;
+  target_price?: number | null;
+  stop_price?: number | null;
+  order_type: "limit" | "market";
+  quantity: number;
+  limit_price?: number | null;
+  cooldown_seconds: number;
+  last_triggered_at?: string | null;
+  trigger_kind: "cost_drop" | "peak_drop";
+  trigger_percent: number;
+  action_mode: "alert_only" | "auto_sell" | "alert_and_sell";
+}
+
+export interface AutoTradeRuleCreate {
+  account_id: string;
+  ticker: string;
+  side: "buy" | "sell";
+  enabled?: boolean;
+  target_price?: number;
+  stop_price?: number;
+  order_type?: "limit" | "market";
+  quantity: number;
+  limit_price?: number;
+  cooldown_seconds?: number;
+  trigger_kind?: "cost_drop" | "peak_drop";
+  trigger_percent?: number;
+  action_mode?: "alert_only" | "auto_sell" | "alert_and_sell";
+}
+
+export interface AutoTradeRuleUpdate extends Partial<AutoTradeRuleCreate> {}
+
+export interface AutoTradeGlobalRule {
+  id: string;
+  account_id: string;
+  enabled: boolean;
+  trigger_kind: "cost_drop" | "peak_drop";
+  trigger_percent: number;
+  action_mode: "alert_only" | "auto_sell" | "alert_and_sell";
+  order_type: "limit" | "market";
+  sell_quantity_ratio: number;
+  limit_price?: number | null;
+  cooldown_seconds: number;
+  last_triggered_at?: string | null;
+}
+
+export interface AutoTradeGlobalRuleCreate {
+  account_id: string;
+  enabled?: boolean;
+  trigger_kind?: "cost_drop" | "peak_drop";
+  trigger_percent?: number;
+  action_mode?: "alert_only" | "auto_sell" | "alert_and_sell";
+  order_type?: "limit" | "market";
+  sell_quantity_ratio?: number;
+  limit_price?: number | null;
+  cooldown_seconds?: number;
+}
+
+export interface AutoTradeGlobalRuleUpdate {
+  enabled?: boolean;
+  trigger_kind?: "cost_drop" | "peak_drop";
+  trigger_percent?: number;
+  action_mode?: "alert_only" | "auto_sell" | "alert_and_sell";
+  order_type?: "limit" | "market";
+  sell_quantity_ratio?: number;
+  limit_price?: number | null;
+  cooldown_seconds?: number;
+}
+
+export interface KISConnectRequest {
+  broker_account_no: string; // CANO 또는 10자리 연속번호(뒤 2자리를 상품 힌트로 사용)
+  /** 비우면 서버가 잔고조회로 ACNT_PRDT_CD 자동 탐색 */
+  product_code?: string | null;
+  is_mock?: boolean;
+}
+
+export interface KISConnectResponse {
+  account_id: string;
+  broker_account_id: string;
+  broker_type: string;
+  api_enabled: boolean;
+  order_enabled: boolean;
+  is_mock: boolean;
+  token_expires_at?: string | null;
+  cano?: string;
+  resolved_product_code?: string;
+  product_code_auto?: boolean;
+}
+
 export const investmentsApi = {
   getHoldings: async (): Promise<ApiResponse<InvestmentHolding[]>> => {
     return apiRequest<InvestmentHolding[]>("/investments/holdings");
@@ -335,6 +472,158 @@ export const investmentsApi = {
       body: JSON.stringify(data),
     });
   },
+
+  syncAccount: async (accountId: string): Promise<ApiResponse<{
+    accountId: string;
+    holdingsCount: number;
+    cashBalance: number;
+    orderableCash: number;
+    syncedAt: string;
+  }>> => {
+    return apiRequest(`/investments/accounts/${accountId}/sync`, {
+      method: "POST",
+    });
+  },
+
+  kisConnect: async (accountId: string, data: KISConnectRequest): Promise<ApiResponse<KISConnectResponse>> => {
+    return apiRequest<KISConnectResponse>(`/investments/accounts/${accountId}/kis/connect`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  createOrder: async (data: InvestmentOrderCreate): Promise<ApiResponse<InvestmentOrderDetail>> => {
+    return apiRequest<InvestmentOrderDetail>("/investments/orders", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  listOrders: async (params?: {
+    account_id?: string;
+    status?: InvestmentOrder["status"];
+    limit?: number;
+  }): Promise<ApiResponse<InvestmentOrder[]>> => {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value));
+        }
+      });
+    }
+    const query = queryParams.toString();
+    return apiRequest<InvestmentOrder[]>(`/investments/orders${query ? `?${query}` : ""}`);
+  },
+
+  getOrder: async (orderId: string): Promise<ApiResponse<InvestmentOrderDetail>> => {
+    return apiRequest<InvestmentOrderDetail>(`/investments/orders/${orderId}`);
+  },
+
+  refreshOrder: async (orderId: string): Promise<ApiResponse<{
+    order: InvestmentOrderDetail;
+    new_executions: InvestmentExecution[];
+  }>> => {
+    return apiRequest(`/investments/orders/${orderId}/refresh`, {
+      method: "POST",
+    });
+  },
+
+  listRules: async (): Promise<ApiResponse<AutoTradeRule[]>> => {
+    return apiRequest<AutoTradeRule[]>("/investments/rules");
+  },
+
+  createRule: async (data: AutoTradeRuleCreate): Promise<ApiResponse<AutoTradeRule>> => {
+    return apiRequest<AutoTradeRule>("/investments/rules", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateRule: async (ruleId: string, data: AutoTradeRuleUpdate): Promise<ApiResponse<AutoTradeRule>> => {
+    return apiRequest<AutoTradeRule>(`/investments/rules/${ruleId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteRule: async (ruleId: string): Promise<ApiResponse<{ deleted: boolean }>> => {
+    return apiRequest<{ deleted: boolean }>(`/investments/rules/${ruleId}`, {
+      method: "DELETE",
+    });
+  },
+
+  listGlobalRules: async (): Promise<ApiResponse<AutoTradeGlobalRule[]>> => {
+    return apiRequest<AutoTradeGlobalRule[]>("/investments/rules/global");
+  },
+
+  createGlobalRule: async (data: AutoTradeGlobalRuleCreate): Promise<ApiResponse<AutoTradeGlobalRule>> => {
+    return apiRequest<AutoTradeGlobalRule>("/investments/rules/global", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateGlobalRule: async (
+    ruleId: string,
+    data: AutoTradeGlobalRuleUpdate,
+  ): Promise<ApiResponse<AutoTradeGlobalRule>> => {
+    return apiRequest<AutoTradeGlobalRule>(`/investments/rules/global/${ruleId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteGlobalRule: async (ruleId: string): Promise<ApiResponse<{ deleted: boolean }>> => {
+    return apiRequest<{ deleted: boolean }>(`/investments/rules/global/${ruleId}`, {
+      method: "DELETE",
+    });
+  },
+
+  listRuleLogs: async (limit = 50): Promise<ApiResponse<Array<{
+    id: string;
+    rule_id: string;
+    account_id: string;
+    ticker: string;
+    status: "skipped" | "triggered" | "failed";
+    reason?: string | null;
+    order_id?: string | null;
+    created_at: string;
+  }>>> => {
+    const query = `?limit=${limit}`;
+    return apiRequest(`/investments/rules/logs${query}`);
+  },
+
+  listRuleTriggers: async (): Promise<ApiResponse<Array<{
+    rule: {
+      id: string;
+      account_id: string;
+      ticker?: string;
+      trigger_kind: "cost_drop" | "peak_drop";
+      trigger_percent: number;
+      action_mode: "alert_only" | "auto_sell" | "alert_and_sell";
+    };
+    ticker: string;
+    name: string;
+    currentPrice: number;
+    shares: number;
+    threshold: number;
+    actual: number;
+  }>>> => {
+    return apiRequest(`/investments/rules/triggers`);
+  },
+
+  enableAutoTrade: async (accountId: string): Promise<ApiResponse<{ account_id: string; auto_trade_enabled: boolean }>> => {
+    return apiRequest(`/investments/accounts/${accountId}/auto-trade/enable`, {
+      method: "POST",
+    });
+  },
+
+  disableAutoTrade: async (accountId: string): Promise<ApiResponse<{ account_id: string; auto_trade_enabled: boolean }>> => {
+    return apiRequest(`/investments/accounts/${accountId}/auto-trade/disable`, {
+      method: "POST",
+    });
+  },
 };
 
 // ==================== 리포트 API ====================
@@ -347,9 +636,12 @@ export interface MonthlySummary {
   savingsRate: number;
 }
 
+/** 백엔드는 `category`·`amount`로 내려줄 수 있음 */
 export interface CategorySpending {
-  name: string;
-  value: number;
+  name?: string;
+  category?: string;
+  value?: number;
+  amount?: number;
   color?: string;
 }
 
@@ -474,14 +766,23 @@ export interface UserSettings {
   currency: string;
   language: string;
   notifications?: Record<string, any>;
+  discord_webhook_configured: boolean;
+  discord_webhook_masked: string | null;
 }
+
+/** PUT /settings 본문(웹훅은 빈 문자열로 삭제) */
+export type UserSettingsUpdate = Partial<
+  Pick<UserSettings, "currency" | "language" | "notifications">
+> & {
+  discord_webhook_url?: string;
+};
 
 export const settingsApi = {
   get: async (): Promise<ApiResponse<UserSettings>> => {
     return apiRequest<UserSettings>("/settings");
   },
 
-  update: async (data: Partial<UserSettings>): Promise<ApiResponse<UserSettings>> => {
+  update: async (data: UserSettingsUpdate): Promise<ApiResponse<UserSettings>> => {
     return apiRequest<UserSettings>("/settings", {
       method: "PUT",
       body: JSON.stringify(data),

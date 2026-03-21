@@ -12,9 +12,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import get_settings
 from app.routers import auth, transactions, accounts, investments, reports, upload, settings as settings_router, category_keywords, parsing_strategies
 from app.services.investment_price_updater import start_investment_price_updater_if_needed
+from app.services.order_status_scheduler import start_order_status_scheduler_if_needed
+from app.services.auto_trade_evaluator import start_auto_trade_evaluator_if_needed
+from app.services.kis_token_refresher import start_kis_token_refresher_if_needed
 
 logger = logging.getLogger("finflow.debug")
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
+# SQLAlchemy가 개별 쿼리/파라미터를 로그로 출력하는 것을 줄이기 위해 레벨을 낮춥니다.
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
 
 _config = get_settings()
 
@@ -31,6 +37,12 @@ app = FastAPI(
 def on_startup() -> None:
     # Background investment price updater (5~10분 주기) - 요청에 무관하게 시세를 갱신합니다.
     start_investment_price_updater_if_needed()
+    # Background order status polling (1분 주기) - pending/partially_filled 주문의 체결/정산 반영
+    start_order_status_scheduler_if_needed()
+    # Background KIS token refresher (만료 시점 자동 재발급)
+    start_kis_token_refresher_if_needed()
+    # Background auto-trade evaluator (alert-only | auto-sell by rules)
+    start_auto_trade_evaluator_if_needed()
 
 # Debug middleware (클래스 먼저 정의)
 class DebugMiddleware(BaseHTTPMiddleware):

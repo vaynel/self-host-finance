@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { categoryKeywordsApi, type CategoryKeywordsByCategory } from "@/lib/api";
+import { categoryKeywordsApi, settingsApi } from "@/lib/api";
 import { useState } from "react";
-import { Plus, Trash2, Edit2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -42,6 +42,28 @@ export default function SettingsPage() {
   const [newCategory, setNewCategory] = useState("");
   const [newKeyword, setNewKeyword] = useState("");
   const [newPriority, setNewPriority] = useState<"high" | "normal" | "low">("normal");
+  const [discordWebhookInput, setDiscordWebhookInput] = useState("");
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["user-settings"],
+    queryFn: async () => {
+      const res = await settingsApi.get();
+      return res.data ?? null;
+    },
+  });
+
+  const settingsMutation = useMutation({
+    mutationFn: settingsApi.update,
+    onSuccess: (res) => {
+      queryClient.setQueryData(["user-settings"], res.data);
+      queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      setDiscordWebhookInput("");
+      toast.success("알림 설정이 저장되었습니다.");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "저장에 실패했습니다.");
+    },
+  });
 
   const { data: keywordsData } = useQuery({
     queryKey: ["category-keywords"],
@@ -100,6 +122,53 @@ export default function SettingsPage() {
   return (
     <AppLayout title="설정">
       <div className="space-y-6 max-w-4xl">
+        <Card className="p-5 glass-card space-y-5">
+          <h3 className="text-sm font-semibold">Discord 알림 (자동매매 룰)</h3>
+          <p className="text-xs text-muted-foreground">
+            자동매매 룰이 실행되거나 알림 전용(alert_only)으로 트리거될 때 이 웹훅으로 메시지를 보냅니다. URL은 서버에 암호화되어 저장됩니다.
+          </p>
+          {settingsData?.discord_webhook_configured && settingsData.discord_webhook_masked && (
+            <p className="text-xs text-muted-foreground font-mono break-all">
+              현재: {settingsData.discord_webhook_masked}
+            </p>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="discord-webhook" className="text-sm">
+              웹훅 URL
+            </Label>
+            <Input
+              id="discord-webhook"
+              type="password"
+              autoComplete="off"
+              placeholder="https://discord.com/api/webhooks/..."
+              value={discordWebhookInput}
+              onChange={(e) => setDiscordWebhookInput(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={settingsMutation.isPending || !discordWebhookInput.trim()}
+              onClick={() =>
+                settingsMutation.mutate({ discord_webhook_url: discordWebhookInput.trim() })
+              }
+            >
+              저장
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={settingsMutation.isPending || !settingsData?.discord_webhook_configured}
+              onClick={() => {
+                if (!confirm("Discord 웹훅을 삭제할까요?")) return;
+                settingsMutation.mutate({ discord_webhook_url: "" });
+              }}
+            >
+              웹훅 삭제
+            </Button>
+          </div>
+        </Card>
+
         <Card className="p-5 glass-card space-y-5">
           <h3 className="text-sm font-semibold">자동화 설정</h3>
 

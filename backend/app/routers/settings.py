@@ -21,7 +21,7 @@ def get_user_settings(current_user: User = Depends(get_current_user), db: DbSess
 @router.put("")
 def update_user_settings(req: SettingsUpdate, current_user: User = Depends(get_current_user), db: DbSession = None):
     """Update user settings."""
-    data = {k: v for k, v in req.model_dump().items() if v is not None}
+    data = req.model_dump(exclude_unset=True)
     if not data:
         s = get_settings(db, current_user.id)
         return success_response(s)

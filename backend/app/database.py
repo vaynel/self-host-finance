@@ -9,7 +9,9 @@ settings = get_settings()
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    echo=settings.env == "development",
+    # 운영/개발 모두에서 SQL 쿼리 로그가 과도하게 찍히지 않도록 비활성화합니다.
+    # 필요 시에는 별도 로그 설정으로 추적하세요.
+    echo=False,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

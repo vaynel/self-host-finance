@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     stock_price_update_interval_seconds: int = 600  # 10 minutes
     stock_price_prune_days: int = 7  # daily history retention (prune)
 
+    # KIS OpenAPI
+    kis_app_key: str = ""  # KIS OpenAPI App Key
+    kis_app_secret: str = ""  # KIS OpenAPI App Secret
+    kis_base_url: str = "https://openapi.koreainvestment.com:9443"  # 실전투자
+    kis_mock_base_url: str = "https://openapivts.koreainvestment.com:29443"  # 모의투자
+    token_encryption_key: str = ""  # 토큰 암호화용 별도 키 (없으면 jwt_secret 사용)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

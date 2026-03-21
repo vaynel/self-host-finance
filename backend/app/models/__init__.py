@@ -9,6 +9,12 @@ from app.models.settings import UserSettings
 from app.models.category_keyword import CategoryKeyword
 from app.models.parsing_strategy import ParsingStrategy
 from app.models.category import Category
+from app.models.broker_account import BrokerAccount
+from app.models.broker_token import BrokerToken
+from app.models.investment_snapshot import InvestmentHoldingSnapshot, InvestmentCashSnapshot
+from app.models.investment_order import InvestmentOrder, InvestmentExecution
+from app.models.auto_trade import AutoTradeRule, AutoTradeRunLog
+from app.models.auto_trade_global import AutoTradeGlobalRule, AutoTradeGlobalRunLog
 
 __all__ = [
     "User",
@@ -21,5 +27,15 @@ __all__ = [
     "UserSettings",
     "CategoryKeyword",
     "ParsingStrategy",
-  "Category",
+    "Category",
+    "BrokerAccount",
+    "BrokerToken",
+    "InvestmentHoldingSnapshot",
+    "InvestmentCashSnapshot",
+    "InvestmentOrder",
+    "InvestmentExecution",
+    "AutoTradeRule",
+    "AutoTradeRunLog",
+    "AutoTradeGlobalRule",
+    "AutoTradeGlobalRunLog",
 ]
