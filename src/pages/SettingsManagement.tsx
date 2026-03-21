@@ -19,8 +19,6 @@ import { Plus, X, Pencil, Check, Webhook, Tag, Bell, Shield, Database, Trash2 } 
 interface Category {
   id: string;
   name: string;
-  type: "income" | "expense" | "transfer";
-  color: string;
 }
 
 interface WebhookConfig {
