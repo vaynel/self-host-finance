@@ -6,6 +6,7 @@ import {
   BarChart3,
   Upload,
   Settings,
+  SlidersHorizontal,
   Wallet,
   LogOut,
   User,
