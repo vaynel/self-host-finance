@@ -30,18 +30,18 @@ interface WebhookConfig {
 }
 
 const defaultCategories: Category[] = [
-  { id: "1", name: "급여", type: "income", color: "hsl(172, 66%, 40%)" },
-  { id: "2", name: "배당", type: "income", color: "hsl(152, 60%, 42%)" },
-  { id: "3", name: "카페", type: "expense", color: "hsl(30, 60%, 50%)" },
-  { id: "4", name: "쇼핑", type: "expense", color: "hsl(340, 60%, 55%)" },
-  { id: "5", name: "구독", type: "expense", color: "hsl(280, 50%, 55%)" },
-  { id: "6", name: "편의점", type: "expense", color: "hsl(100, 40%, 50%)" },
-  { id: "7", name: "주거", type: "expense", color: "hsl(172, 66%, 40%)" },
-  { id: "8", name: "배달", type: "expense", color: "hsl(20, 70%, 55%)" },
-  { id: "9", name: "교통", type: "expense", color: "hsl(200, 60%, 50%)" },
-  { id: "10", name: "식료품", type: "expense", color: "hsl(152, 60%, 42%)" },
-  { id: "11", name: "운동", type: "expense", color: "hsl(262, 60%, 55%)" },
-  { id: "12", name: "저축", type: "transfer", color: "hsl(38, 92%, 50%)" },
+  { id: "1", name: "급여" },
+  { id: "2", name: "배당" },
+  { id: "3", name: "카페" },
+  { id: "4", name: "쇼핑" },
+  { id: "5", name: "구독" },
+  { id: "6", name: "편의점" },
+  { id: "7", name: "주거" },
+  { id: "8", name: "배달" },
+  { id: "9", name: "교통" },
+  { id: "10", name: "식료품" },
+  { id: "11", name: "운동" },
+  { id: "12", name: "저축" },
 ];
 
 const eventOptions = [
