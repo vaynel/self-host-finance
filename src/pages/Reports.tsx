@@ -25,6 +25,40 @@ const assetTrend = [
   { month: "3월", assets: 36300000 },
 ];
 
+const totalSpending = categorySpending.reduce((sum, c) => sum + c.value, 0);
+
+function CustomPieTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0];
+  const percent = ((data.value / totalSpending) * 100).toFixed(1);
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
+      <div className="flex items-center gap-2 mb-1">
+        <div className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: data.payload.color }} />
+        <span className="text-sm font-medium">{data.name}</span>
+      </div>
+      <p className="text-sm font-mono font-semibold">{formatKRW(data.value)}</p>
+      <p className="text-xs text-muted-foreground">{percent}%</p>
+    </div>
+  );
+}
+
+function CustomPieLabel({ cx, cy, midAngle, innerRadius, outerRadius, name, value }: any) {
+  const RADIAN = Math.PI / 180;
+  const radius = outerRadius + 28;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const percent = ((value / totalSpending) * 100).toFixed(0);
+
+  if (Number(percent) < 3) return null;
+
+  return (
+    <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? "start" : "end"} dominantBaseline="central" fontSize={11}>
+      {name} {percent}%
+    </text>
+  );
+}
+
 export default function Reports() {
   return (
     <AppLayout title="리포트">
@@ -63,18 +97,29 @@ export default function Reports() {
             </div>
           </Card>
 
-          {/* Category Breakdown */}
+          {/* Category Breakdown - Enhanced Pie */}
           <Card className="p-5 glass-card">
             <h3 className="text-sm font-semibold mb-4">카테고리별 소비</h3>
-            <div className="h-64">
+            <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={categorySpending} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value" isAnimationActive={false}>
+                  <Pie
+                    data={categorySpending}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={85}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                    label={CustomPieLabel}
+                    isAnimationActive={false}
+                  >
                     {categorySpending.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
+                      <Cell key={i} fill={entry.color} stroke="hsl(var(--card))" strokeWidth={2} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} formatter={(v: number) => [formatKRW(v)]} />
+                  <Tooltip content={<CustomPieTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
