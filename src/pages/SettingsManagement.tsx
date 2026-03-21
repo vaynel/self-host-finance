@@ -19,8 +19,6 @@ import { Plus, X, Pencil, Check, Webhook, Tag, Bell, Shield, Database, Trash2 } 
 interface Category {
   id: string;
   name: string;
-  type: "income" | "expense" | "transfer";
-  color: string;
 }
 
 interface WebhookConfig {
@@ -32,18 +30,18 @@ interface WebhookConfig {
 }
 
 const defaultCategories: Category[] = [
-  { id: "1", name: "급여", type: "income", color: "hsl(172, 66%, 40%)" },
-  { id: "2", name: "배당", type: "income", color: "hsl(152, 60%, 42%)" },
-  { id: "3", name: "카페", type: "expense", color: "hsl(30, 60%, 50%)" },
-  { id: "4", name: "쇼핑", type: "expense", color: "hsl(340, 60%, 55%)" },
-  { id: "5", name: "구독", type: "expense", color: "hsl(280, 50%, 55%)" },
-  { id: "6", name: "편의점", type: "expense", color: "hsl(100, 40%, 50%)" },
-  { id: "7", name: "주거", type: "expense", color: "hsl(172, 66%, 40%)" },
-  { id: "8", name: "배달", type: "expense", color: "hsl(20, 70%, 55%)" },
-  { id: "9", name: "교통", type: "expense", color: "hsl(200, 60%, 50%)" },
-  { id: "10", name: "식료품", type: "expense", color: "hsl(152, 60%, 42%)" },
-  { id: "11", name: "운동", type: "expense", color: "hsl(262, 60%, 55%)" },
-  { id: "12", name: "저축", type: "transfer", color: "hsl(38, 92%, 50%)" },
+  { id: "1", name: "급여" },
+  { id: "2", name: "배당" },
+  { id: "3", name: "카페" },
+  { id: "4", name: "쇼핑" },
+  { id: "5", name: "구독" },
+  { id: "6", name: "편의점" },
+  { id: "7", name: "주거" },
+  { id: "8", name: "배달" },
+  { id: "9", name: "교통" },
+  { id: "10", name: "식료품" },
+  { id: "11", name: "운동" },
+  { id: "12", name: "저축" },
 ];
 
 const eventOptions = [
@@ -58,7 +56,7 @@ export default function SettingsManagement() {
   // Category state
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [newCatName, setNewCatName] = useState("");
-  const [newCatType, setNewCatType] = useState<"income" | "expense" | "transfer">("expense");
+  
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editCatName, setEditCatName] = useState("");
 
@@ -87,7 +85,7 @@ export default function SettingsManagement() {
   const addCategory = () => {
     if (!newCatName.trim()) return;
     const id = Date.now().toString();
-    setCategories([...categories, { id, name: newCatName.trim(), type: newCatType, color: "hsl(220, 15%, 50%)" }]);
+    setCategories([...categories, { id, name: newCatName.trim() }]);
     setNewCatName("");
   };
 
@@ -136,23 +134,6 @@ export default function SettingsManagement() {
     }));
   };
 
-  const typeLabel = (type: string) => {
-    switch (type) {
-      case "income": return "수입";
-      case "expense": return "지출";
-      case "transfer": return "이체";
-      default: return type;
-    }
-  };
-
-  const typeColor = (type: string) => {
-    switch (type) {
-      case "income": return "bg-primary/10 text-primary";
-      case "expense": return "bg-destructive/10 text-destructive";
-      case "transfer": return "bg-muted text-muted-foreground";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
 
   return (
     <AppLayout title="설정 관리">
@@ -174,16 +155,6 @@ export default function SettingsManagement() {
               className="flex-1 h-9 text-sm"
               onKeyDown={(e) => e.key === "Enter" && addCategory()}
             />
-            <Select value={newCatType} onValueChange={(v) => setNewCatType(v as any)}>
-              <SelectTrigger className="w-24 h-9 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="income" className="text-xs">수입</SelectItem>
-                <SelectItem value="expense" className="text-xs">지출</SelectItem>
-                <SelectItem value="transfer" className="text-xs">이체</SelectItem>
-              </SelectContent>
-            </Select>
             <Button size="sm" onClick={addCategory} className="h-9">
               <Plus className="h-3.5 w-3.5" />
             </Button>
@@ -212,9 +183,8 @@ export default function SettingsManagement() {
                 ) : (
                   <Badge
                     variant="outline"
-                    className={`text-xs gap-1.5 pr-1 cursor-default ${typeColor(cat.type)}`}
+                    className="text-xs gap-1 pr-1 cursor-default"
                   >
-                    <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
                     {cat.name}
                     <button onClick={() => startEditCategory(cat)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-background/50 transition-opacity">
                       <Pencil className="h-2.5 w-2.5" />
