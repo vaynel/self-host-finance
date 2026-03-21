@@ -172,16 +172,6 @@ export default function SettingsManagement() {
               className="flex-1 h-9 text-sm"
               onKeyDown={(e) => e.key === "Enter" && addCategory()}
             />
-            <Select value={newCatType} onValueChange={(v) => setNewCatType(v as any)}>
-              <SelectTrigger className="w-24 h-9 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="income" className="text-xs">수입</SelectItem>
-                <SelectItem value="expense" className="text-xs">지출</SelectItem>
-                <SelectItem value="transfer" className="text-xs">이체</SelectItem>
-              </SelectContent>
-            </Select>
             <Button size="sm" onClick={addCategory} className="h-9">
               <Plus className="h-3.5 w-3.5" />
             </Button>
