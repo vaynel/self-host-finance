@@ -85,7 +85,7 @@ export default function SettingsManagement() {
   const addCategory = () => {
     if (!newCatName.trim()) return;
     const id = Date.now().toString();
-    setCategories([...categories, { id, name: newCatName.trim(), type: newCatType, color: "hsl(220, 15%, 50%)" }]);
+    setCategories([...categories, { id, name: newCatName.trim() }]);
     setNewCatName("");
   };
 
