@@ -264,7 +264,7 @@ class KISAdapter(BrokerAdapter):
             headers["tr_id"] = "VTTC0801U" if self.broker_account.is_mock else "TTTC0801U"
 
         # 매수/매도 구분
-        bns_dvsn_cd = "01" if side == "buy" else "02"
+        sll_buy_dvsn_cd = "01" if side == "buy" else "02"
         # 지정가/시장가 구분
         ord_dvsn = "00" if order_type == "limit" else "01"
 
@@ -275,7 +275,8 @@ class KISAdapter(BrokerAdapter):
             "ORD_DVSN": ord_dvsn,
             "ORD_QTY": str(int(quantity)),
             "ORD_UNPR": str(int(price)) if price else "0",
-            "BNS_DVSN_CD": bns_dvsn_cd,
+            # KIS API expects SLL_BUY_DVSN_CD (01 buy / 02 sell)
+            "SLL_BUY_DVSN_CD": sll_buy_dvsn_cd,
         }
 
         response = requests.post(url, headers=headers, json=data, timeout=10)
