@@ -145,6 +145,13 @@ def create_order(
     except Exception as e:
         raise_400(f"주문 실행 실패: {str(e)}")
 
+    broker_order_id = (broker_result.get("order_id") if isinstance(broker_result, dict) else None) or ""
+    broker_order_id = str(broker_order_id).strip()
+    if not broker_order_id:
+        # If we don't have a broker order id, we cannot refresh/settle later.
+        # Do not create a pending local order that will block auto-trade as a "duplicate pending".
+        raise_400("주문 실행 실패: 브로커 주문번호(order_id)를 받지 못했습니다.")
+
     order = InvestmentOrder(
         id=f"ord_{uuid.uuid4().hex[:12]}",
         user_id=user_id,
@@ -155,7 +162,7 @@ def create_order(
         quantity=quantity,
         price=price,
         order_type=order_type,
-        broker_order_id=broker_result.get("order_id"),
+        broker_order_id=broker_order_id,
         status=OrderStatus.PENDING.value,
         requested_at=datetime.utcnow(),
     )
