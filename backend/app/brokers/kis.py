@@ -255,7 +255,13 @@ class KISAdapter(BrokerAdapter):
         # KIS API: 주문 실행
         url = f"{self._base_url}/uapi/domestic-stock/v1/trading/order-cash"
         headers = self._get_headers()
-        headers["tr_id"] = "VTTC0802U" if self.broker_account.is_mock else "TTTC0802U"
+        # KIS TR ID:
+        # - buy : TTTC0802U (mock: VTTC0802U)
+        # - sell: TTTC0801U (mock: VTTC0801U)
+        if side == "buy":
+            headers["tr_id"] = "VTTC0802U" if self.broker_account.is_mock else "TTTC0802U"
+        else:
+            headers["tr_id"] = "VTTC0801U" if self.broker_account.is_mock else "TTTC0801U"
 
         # 매수/매도 구분
         bns_dvsn_cd = "01" if side == "buy" else "02"
