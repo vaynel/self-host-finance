@@ -255,7 +255,7 @@ class KISAdapter(BrokerAdapter):
         # KIS API: 주문 실행
         url = f"{self._base_url}/uapi/domestic-stock/v1/trading/order-cash"
         headers = self._get_headers()
-        headers["tr_id"] = "TTTC0802U" if self.broker_account.is_mock else "TTTC0802U"
+        headers["tr_id"] = "VTTC0802U" if self.broker_account.is_mock else "TTTC0802U"
 
         # 매수/매도 구분
         bns_dvsn_cd = "01" if side == "buy" else "02"
@@ -276,8 +276,17 @@ class KISAdapter(BrokerAdapter):
         response.raise_for_status()
         result = response.json()
 
+        # KIS는 HTTP 200이어도 실패할 수 있음
+        self._raise_if_kis_error(result, "주문 실행")
+
+        # 응답은 보통 output 하위에 ODNO가 존재합니다.
+        output = result.get("output") if isinstance(result, dict) else None
+        if not isinstance(output, dict):
+            output = {}
+        order_no = (output.get("ODNO") or result.get("ODNO") or output.get("odno") or result.get("odno") or "").strip()
+
         return {
-            "order_id": result.get("ODNO", ""),  # 주문번호
+            "order_id": order_no,  # 주문번호(ODNO)
             "status": "pending",
             "requested_at": datetime.utcnow(),
         }
