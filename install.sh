@@ -11,6 +11,17 @@ if [ -d "backend" ]; then
   ENV_PATH="$PROJECT_ROOT/backend/.env"
   if [ -f "$ENV_PATH" ]; then
     echo " - backend/.env 이미 존재, 건너뜁니다."
+    # backend/.env가 이미 있더라도 Celery 설정 키는 없을 수 있으므로 보강합니다.
+    if ! awk -F= '$1 ~ "^CELERY_ENABLED$" {found=1} END {exit !found}' "$ENV_PATH" 2>/dev/null; then
+      cat >>"$ENV_PATH" <<EOF
+CELERY_ENABLED=true
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
+CELERY_SYNC_INTERVAL_SECONDS=300
+CELERY_EVALUATE_INTERVAL_SECONDS=60
+EOF
+      echo " - backend/.env에 Celery 설정을 추가했습니다."
+    fi
   else
     POSTGRES_USER=""
     POSTGRES_PASSWORD=""
@@ -36,6 +47,11 @@ DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/$
 JWT_SECRET=${JWT_SECRET}
 CORS_ORIGIN=http://localhost:8000
 PORT=8001
+CELERY_ENABLED=true
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
+CELERY_SYNC_INTERVAL_SECONDS=300
+CELERY_EVALUATE_INTERVAL_SECONDS=60
 EOF
   fi
 fi
@@ -121,15 +137,17 @@ fi
 echo
 echo "2) 데이터베이스 컨테이너(docker-compose) 준비 (선택사항)"
 cd "$PROJECT_ROOT"
-if command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&1; then
-  if [ -f "docker-compose.yml" ]; then
-    echo " - docker-compose.yml 발견, postgres 컨테이너를 백그라운드로 올립니다."
+if command -v docker >/dev/null 2>&1 && [ -f "docker-compose.yml" ]; then
+  echo " - docker-compose.yml 발견, 컨테이너를 백그라운드로 올립니다."
+  if command -v docker-compose >/dev/null 2>&1; then
     docker-compose up -d
+  elif docker compose version >/dev/null 2>&1; then
+    docker compose up -d
   else
-    echo " - docker-compose.yml이 없어 DB 컨테이너는 건너뜁니다."
+    echo " - 경고: docker-compose(docker compose) 명령을 찾지 못해 DB/Redis 컨테이너 설정을 건너뜁니다."
   fi
 else
-  echo " - docker 또는 docker-compose 명령을 찾을 수 없어 DB 컨테이너 설정을 건너뜁니다."
+  echo " - docker 또는 docker-compose.yml이 없어 DB/Redis 컨테이너 설정을 건너뜁니다."
 fi
 
 echo

@@ -15,6 +15,7 @@ from app.models.auto_trade_global import AutoTradeGlobalRule
 from app.models.investment_peak import InvestmentPeakTracker
 from app.models.investment_snapshot import InvestmentHoldingSnapshot
 from app.models.investment_order import InvestmentOrder
+from app.models.broker_account import BrokerAccount
 from app.services.auto_trade_service import (
     evaluate_rule_guard,
     create_run_log,
@@ -201,6 +202,11 @@ async def evaluate_once() -> None:
                 continue
             cooldown = int(gr.cooldown_seconds or "300")
             if gr.last_triggered_at and datetime.utcnow() < (gr.last_triggered_at + timedelta(seconds=cooldown)):
+                continue
+
+            # 계좌 auto-trade가 꺼져 있으면 글로벌 규칙도 평가/주문을 스킵합니다.
+            broker_account = db.query(BrokerAccount).filter(BrokerAccount.account_id == gr.account_id).first()
+            if not broker_account or not broker_account.auto_trade_enabled:
                 continue
 
             holdings = _get_latest_holdings(db, gr.user_id, gr.account_id)

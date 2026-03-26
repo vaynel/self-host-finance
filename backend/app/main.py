@@ -42,7 +42,11 @@ def on_startup() -> None:
     # Background KIS token refresher (만료 시점 자동 재발급)
     start_kis_token_refresher_if_needed()
     # Background auto-trade evaluator (alert-only | auto-sell by rules)
-    start_auto_trade_evaluator_if_needed()
+    # If Celery is enabled, Celery beat/worker will handle sync+evaluation.
+    if not _config.celery_enabled:
+        start_auto_trade_evaluator_if_needed()
+    else:
+        logger.info("Celery enabled -> skip FastAPI auto-trade evaluator startup")
 
 # Debug middleware (클래스 먼저 정의)
 class DebugMiddleware(BaseHTTPMiddleware):

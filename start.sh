@@ -11,17 +11,28 @@ BACKEND_LOG="$PROJECT_ROOT/logs/backend.log"
 FRONTEND_LOG="$PROJECT_ROOT/logs/frontend.log"
 BACKEND_PID_FILE="$PROJECT_ROOT/logs/backend.pid"
 FRONTEND_PID_FILE="$PROJECT_ROOT/logs/frontend.pid"
+CELERY_WORKER_LOG="$PROJECT_ROOT/logs/celery-worker.log"
+CELERY_BEAT_LOG="$PROJECT_ROOT/logs/celery-beat.log"
+CELERY_WORKER_PID_FILE="$PROJECT_ROOT/logs/celery-worker.pid"
+CELERY_BEAT_PID_FILE="$PROJECT_ROOT/logs/celery-beat.pid"
 
 echo "[FinFlow] backend 로그: $BACKEND_LOG"
 echo "[FinFlow] frontend 로그: $FRONTEND_LOG"
 
 echo "1) PostgreSQL 컨테이너 상태 확인 (docker-compose 사용 시)"
-if command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&1 && [ -f "docker-compose.yml" ]; then
-  echo " - docker-compose.yml 감지, postgres 컨테이너를 백그라운드로 실행합니다."
-  docker-compose up -d
+if command -v docker >/dev/null 2>&1 && [ -f "docker-compose.yml" ]; then
+  echo " - docker-compose.yml 감지, 컨테이너를 백그라운드로 실행합니다."
+  if command -v docker-compose >/dev/null 2>&1; then
+    docker-compose up -d
+  elif docker compose version >/dev/null 2>&1; then
+    docker compose up -d
+  else
+    echo " - 경고: docker compose 명령을 찾지 못해 DB/Redis 컨테이너 실행을 건너뜁니다."
+    echo "   로컬에 PostgreSQL/Redis가 이미 실행 중이어야 합니다."
+  fi
 else
-  echo " - docker/docker-compose 또는 docker-compose.yml을 찾지 못해 DB 컨테이너 실행을 건너뜁니다."
-  echo "   로컬에 PostgreSQL가 이미 실행 중이어야 합니다."
+  echo " - docker 또는 docker-compose.yml을 찾지 못해 DB/Redis 컨테이너 실행을 건너뜁니다."
+  echo "   로컬에 PostgreSQL/Redis가 이미 실행 중이어야 합니다."
 fi
 
 echo
@@ -65,6 +76,25 @@ fi
 
 echo " - uvicorn 개발 서버 백그라운드 실행 (포트 8001)"
 cd "$PROJECT_ROOT/backend"
+
+get_env_value() {
+  # usage: get_env_value KEY "default"
+  local key="$1"
+  local def="${2:-}"
+  if [ ! -f "$PROJECT_ROOT/backend/.env" ]; then
+    echo "$def"
+    return 0
+  fi
+  val="$(awk -F= -v k="$key" '$1 ~ "^"k"$" {print $2; exit}' "$PROJECT_ROOT/backend/.env" 2>/dev/null | tr -d '\r' || true)"
+  if [ -z "${val:-}" ]; then
+    echo "$def"
+  else
+    echo "$val"
+  fi
+}
+
+CELERY_ENABLED="$(get_env_value "CELERY_ENABLED" "false" || echo "false")"
+CELERY_ENABLED="$(echo "${CELERY_ENABLED}" | tr '[:upper:]' '[:lower:]' | xargs || true)"
 find_pid_by_port() {
   local port="$1"
   if command -v ss >/dev/null 2>&1; then
@@ -100,6 +130,39 @@ else
 fi
 
 echo
+echo "2.5) Celery worker/beat 실행"
+if [ "$CELERY_ENABLED" = "true" ] || [ "$CELERY_ENABLED" = "1" ]; then
+  existing_worker_pid=""
+  if [ -f "$CELERY_WORKER_PID_FILE" ]; then
+    existing_worker_pid="$(cat "$CELERY_WORKER_PID_FILE" 2>/dev/null || echo "")"
+  fi
+  if [ -n "${existing_worker_pid:-}" ] && kill -0 "$existing_worker_pid" >/dev/null 2>&1; then
+    echo " - celery worker 이미 실행 중입니다. (PID: $existing_worker_pid)"
+  else
+    rm -f "$CELERY_WORKER_PID_FILE" || true
+    nohup "$PYTHON_BIN" -m celery -A app.celery_app worker --concurrency=1 -l INFO >>"$CELERY_WORKER_LOG" 2>&1 &
+    WORKER_PID=$!
+    echo "$WORKER_PID" >"$CELERY_WORKER_PID_FILE"
+    echo " - celery worker PID: $WORKER_PID (저장: $CELERY_WORKER_PID_FILE)"
+  fi
+
+  existing_beat_pid=""
+  if [ -f "$CELERY_BEAT_PID_FILE" ]; then
+    existing_beat_pid="$(cat "$CELERY_BEAT_PID_FILE" 2>/dev/null || echo "")"
+  fi
+  if [ -n "${existing_beat_pid:-}" ] && kill -0 "$existing_beat_pid" >/dev/null 2>&1; then
+    echo " - celery beat 이미 실행 중입니다. (PID: $existing_beat_pid)"
+  else
+    rm -f "$CELERY_BEAT_PID_FILE" || true
+    nohup "$PYTHON_BIN" -m celery -A app.celery_app beat -l INFO >>"$CELERY_BEAT_LOG" 2>&1 &
+    BEAT_PID=$!
+    echo "$BEAT_PID" >"$CELERY_BEAT_PID_FILE"
+    echo " - celery beat PID: $BEAT_PID (저장: $CELERY_BEAT_PID_FILE)"
+  fi
+else
+  echo " - CELERY_ENABLED=$CELERY_ENABLED -> celery 실행 스킵"
+fi
+
 echo "3) Frontend 서버 실행 (nohup)"
 if [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
   cd "$PROJECT_ROOT/frontend"
@@ -145,6 +208,8 @@ echo
 echo "[FinFlow] 백그라운드로 실행했습니다."
 echo " - backend 로그: $BACKEND_LOG"
 echo " - frontend 로그: $FRONTEND_LOG"
+echo " - celery worker 로그: $CELERY_WORKER_LOG"
+echo " - celery beat 로그: $CELERY_BEAT_LOG"
 echo "종료하려면: kill \$(cat logs/backend.pid) ; kill \$(cat logs/frontend.pid) (frontend가 실행된 경우)"
 exit 0
 

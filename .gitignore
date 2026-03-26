@@ -23,6 +23,8 @@ venv/
 backend/.venv/
 backend/uvicorn.log
 logs/
+celerybeat-schedule
+backend/celerybeat-schedule
 
 # Frontend / Node
 node_modules/

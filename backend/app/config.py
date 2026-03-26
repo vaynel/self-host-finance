@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     stock_price_update_interval_seconds: int = 600  # 10 minutes
     stock_price_prune_days: int = 7  # daily history retention (prune)
 
+    # Celery (async background jobs)
+    celery_enabled: bool = False
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
+    celery_sync_interval_seconds: int = 300  # sync holdings period
+    celery_evaluate_interval_seconds: int = 60  # evaluate auto-trade period
+
     # KIS OpenAPI
     kis_app_key: str = ""  # KIS OpenAPI App Key
     kis_app_secret: str = ""  # KIS OpenAPI App Secret

@@ -31,3 +31,7 @@ requests>=2.31.0
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
 httpx>=0.26.0
+
+# Celery / Redis (background workers)
+celery>=5.3.6
+redis>=5.0.0

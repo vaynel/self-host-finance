@@ -310,6 +310,12 @@ def evaluate_rule_guard(db: Session, rule: AutoTradeRule) -> tuple[bool, str]:
     """장중/쿨다운/중복 주문 방지 검증."""
     if not rule.enabled:
         return False, "rule_disabled"
+
+    # 계좌 단위 auto-trade 설정이 꺼져 있으면 규칙을 무시합니다.
+    broker_account = db.query(BrokerAccount).filter(BrokerAccount.account_id == rule.account_id).first()
+    if not broker_account or not broker_account.auto_trade_enabled:
+        return False, "auto_trade_disabled"
+
     if not is_market_open_kst():
         # 알림만 모드에서는 장이 열릴 때까지 평가/주문을 미룹니다.
         # auto_sell/alert_and_sell은 조건 충족 시 주문 시도를 하도록 허용합니다.
