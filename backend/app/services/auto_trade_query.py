@@ -17,61 +17,65 @@ def list_current_triggers(db: Session, user_id: str) -> list[dict]:
     results: list[dict] = []
     rules = db.query(AutoTradeRule).filter(AutoTradeRule.enabled.is_(True), AutoTradeRule.user_id == user_id).all()
     for rule in rules:
-        holdings = (
+        h = (
             db.query(InvestmentHoldingSnapshot)
             .filter(
                 InvestmentHoldingSnapshot.user_id == user_id,
                 InvestmentHoldingSnapshot.account_id == rule.account_id,
+                InvestmentHoldingSnapshot.ticker == rule.ticker,
             )
-            .all()
+            .order_by(InvestmentHoldingSnapshot.synced_at.desc())
+            .first()
         )
-        for h in holdings:
-            if h.ticker != rule.ticker:
-                continue
-            current_price = Decimal(str(h.current_price or 0))
-            if current_price <= 0:
-                continue
-            threshold = Decimal(str(rule.trigger_percent or 0))
-            actual = Decimal("0")
-            hit = False
-            if rule.trigger_kind == "cost_drop":
-                avg = Decimal(str(h.average_price or 0))
-                if avg > 0:
-                    actual = (avg - current_price) / avg * Decimal("100")
-                    hit = actual >= threshold
-            else:  # peak_drop
-                peak_row = (
-                    db.query(InvestmentPeakTracker)
-                    .filter(
-                        InvestmentPeakTracker.user_id == user_id,
-                        InvestmentPeakTracker.account_id == rule.account_id,
-                        InvestmentPeakTracker.ticker == rule.ticker,
-                    )
-                    .first()
+        if not h:
+            continue
+
+        current_price = Decimal(str(h.current_price or 0))
+        if current_price <= 0:
+            continue
+
+        threshold = Decimal(str(rule.trigger_percent or 0))
+        actual = Decimal("0")
+        hit = False
+        if rule.trigger_kind == "cost_drop":
+            avg = Decimal(str(h.average_price or 0))
+            if avg > 0:
+                actual = (avg - current_price) / avg * Decimal("100")
+                hit = actual >= threshold
+        else:  # peak_drop
+            peak_row = (
+                db.query(InvestmentPeakTracker)
+                .filter(
+                    InvestmentPeakTracker.user_id == user_id,
+                    InvestmentPeakTracker.account_id == rule.account_id,
+                    InvestmentPeakTracker.ticker == rule.ticker,
                 )
-                peak = Decimal(str(peak_row.peak_price)) if peak_row else current_price
-                if peak > 0:
-                    actual = (peak - current_price) / peak * Decimal("100")
-                    hit = actual >= threshold
-            if hit:
-                results.append(
-                    {
-                        "rule": {
-                            "id": rule.id,
-                            "account_id": rule.account_id,
-                            "ticker": rule.ticker,
-                            "trigger_kind": rule.trigger_kind,
-                            "trigger_percent": float(threshold),
-                            "action_mode": rule.action_mode,
-                        },
-                        "ticker": h.ticker,
-                        "name": h.name,
-                        "currentPrice": float(current_price),
-                        "shares": float(h.quantity or 0),
-                        "threshold": float(threshold),
-                        "actual": float(actual),
-                    }
-                )
+                .first()
+            )
+            peak = Decimal(str(peak_row.peak_price)) if peak_row else current_price
+            if peak > 0:
+                actual = (peak - current_price) / peak * Decimal("100")
+                hit = actual >= threshold
+
+        if hit:
+            results.append(
+                {
+                    "rule": {
+                        "id": rule.id,
+                        "account_id": rule.account_id,
+                        "ticker": rule.ticker,
+                        "trigger_kind": rule.trigger_kind,
+                        "trigger_percent": float(threshold),
+                        "action_mode": rule.action_mode,
+                    },
+                    "ticker": h.ticker,
+                    "name": h.name,
+                    "currentPrice": float(current_price),
+                    "shares": float(h.quantity or 0),
+                    "threshold": float(threshold),
+                    "actual": float(actual),
+                }
+            )
 
     # Global rules: apply to all tickers in the account
     global_rules = db.query(AutoTradeGlobalRule).filter(AutoTradeGlobalRule.enabled.is_(True), AutoTradeGlobalRule.user_id == user_id).all()
@@ -82,9 +86,15 @@ def list_current_triggers(db: Session, user_id: str) -> list[dict]:
                 InvestmentHoldingSnapshot.user_id == user_id,
                 InvestmentHoldingSnapshot.account_id == gr.account_id,
             )
+            .order_by(InvestmentHoldingSnapshot.synced_at.desc())
             .all()
         )
+        seen: set[str] = set()
         for h in holdings:
+            # synced_at desc 순서라서, ticker별 첫 row가 최신 스냅샷입니다.
+            if h.ticker in seen:
+                continue
+            seen.add(h.ticker)
             current_price = Decimal(str(h.current_price or 0))
             if h.ticker is None or current_price <= 0:
                 continue

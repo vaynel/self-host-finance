@@ -34,6 +34,7 @@ def _get_latest_holdings(db: Session, user_id: str, account_id: str):
     return (
         db.query(InvestmentHoldingSnapshot)
         .filter(InvestmentHoldingSnapshot.user_id == user_id, InvestmentHoldingSnapshot.account_id == account_id)
+        .order_by(InvestmentHoldingSnapshot.synced_at.desc())
         .all()
     )
 
@@ -164,6 +165,23 @@ async def evaluate_once() -> None:
                 db.commit()
             except Exception as e:
                 logger.exception("auto_sell failed: rule_id=%s", rule.id)
+                # 주문 실패는 알림으로도 남겨야 사용자가 "안 되는 것처럼" 보이지 않습니다.
+                try:
+                    notify_rule_triggered(
+                        db,
+                        user_id=rule.user_id,
+                        scope="ticker",
+                        rule_id=rule.id,
+                        account_id=rule.account_id,
+                        ticker=rule.ticker,
+                        stock_name=getattr(target, "name", None),
+                        trigger_kind=rule.trigger_kind,
+                        trigger_percent=float(rule.trigger_percent or 0),
+                        action_mode=rule.action_mode,
+                        detail=f"매도 주문 실패: {str(e)}",
+                    )
+                except Exception:
+                    logger.exception("discord notify failed after auto_sell error: rule_id=%s", rule.id)
                 create_run_log(
                     db,
                     user_id=rule.user_id,
@@ -179,7 +197,7 @@ async def evaluate_once() -> None:
         global_rules = db.query(AutoTradeGlobalRule).filter(AutoTradeGlobalRule.enabled.is_(True)).all()
         for gr in global_rules:
             # global cooldown (per rule)
-            if not is_market_open_kst():
+            if not is_market_open_kst() and gr.action_mode == "alert_only":
                 continue
             cooldown = int(gr.cooldown_seconds or "300")
             if gr.last_triggered_at and datetime.utcnow() < (gr.last_triggered_at + timedelta(seconds=cooldown)):
@@ -319,6 +337,22 @@ async def evaluate_once() -> None:
                     triggered_any_for_rule = True
                 except Exception as e:
                     logger.exception("global auto_sell failed: rule_id=%s ticker=%s", gr.id, h.ticker)
+                    try:
+                        notify_rule_triggered(
+                            db,
+                            user_id=gr.user_id,
+                            scope="global",
+                            rule_id=gr.id,
+                            account_id=gr.account_id,
+                            ticker=h.ticker,
+                            stock_name=getattr(h, "name", None),
+                            trigger_kind=gr.trigger_kind,
+                            trigger_percent=float(threshold),
+                            action_mode=gr.action_mode,
+                            detail=f"매도 주문 실패: {str(e)}",
+                        )
+                    except Exception:
+                        logger.exception("discord notify failed after global auto_sell error: rule_id=%s", gr.id)
                     create_global_run_log(
                         db,
                         user_id=gr.user_id,

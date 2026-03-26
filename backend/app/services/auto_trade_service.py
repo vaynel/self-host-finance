@@ -311,7 +311,10 @@ def evaluate_rule_guard(db: Session, rule: AutoTradeRule) -> tuple[bool, str]:
     if not rule.enabled:
         return False, "rule_disabled"
     if not is_market_open_kst():
-        return False, "market_closed"
+        # 알림만 모드에서는 장이 열릴 때까지 평가/주문을 미룹니다.
+        # auto_sell/alert_and_sell은 조건 충족 시 주문 시도를 하도록 허용합니다.
+        if rule.action_mode == "alert_only":
+            return False, "market_closed"
 
     cooldown = int(rule.cooldown_seconds or "300")
     if rule.last_triggered_at and datetime.utcnow() < (rule.last_triggered_at + timedelta(seconds=cooldown)):
