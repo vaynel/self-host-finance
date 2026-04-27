@@ -255,16 +255,14 @@ class KISAdapter(BrokerAdapter):
         # KIS API: 주문 실행
         url = f"{self._base_url}/uapi/domestic-stock/v1/trading/order-cash"
         headers = self._get_headers()
-        # KIS TR ID:
-        # - buy : TTTC0802U (mock: VTTC0802U)
-        # - sell: TTTC0801U (mock: VTTC0801U)
+        # KIS TR ID (신TR 권장):
+        # - sell: TTTC0011U (mock: VTTC0011U)
+        # - buy : TTTC0012U (mock: VTTC0012U)
         if side == "buy":
-            headers["tr_id"] = "VTTC0802U" if self.broker_account.is_mock else "TTTC0802U"
+            headers["tr_id"] = "VTTC0012U" if self.broker_account.is_mock else "TTTC0012U"
         else:
-            headers["tr_id"] = "VTTC0801U" if self.broker_account.is_mock else "TTTC0801U"
+            headers["tr_id"] = "VTTC0011U" if self.broker_account.is_mock else "TTTC0011U"
 
-        # 매수/매도 구분
-        sll_buy_dvsn_cd = "01" if side == "buy" else "02"
         # 지정가/시장가 구분
         ord_dvsn = "00" if order_type == "limit" else "01"
 
@@ -275,8 +273,7 @@ class KISAdapter(BrokerAdapter):
             "ORD_DVSN": ord_dvsn,
             "ORD_QTY": str(int(quantity)),
             "ORD_UNPR": str(int(price)) if price else "0",
-            # KIS API expects SLL_BUY_DVSN_CD (01 buy / 02 sell)
-            "SLL_BUY_DVSN_CD": sll_buy_dvsn_cd,
+            # EXCG_ID_DVSN_CD (optional): KRX/NXT/SOR. default is KRX if omitted.
         }
 
         response = requests.post(url, headers=headers, json=data, timeout=10)
@@ -299,56 +296,95 @@ class KISAdapter(BrokerAdapter):
         }
 
     def get_order_status(self, order_id: str) -> Dict[str, Any]:
-        """주문 상태 조회."""
-        # KIS API: 주문 체결 조회
-        url = f"{self._base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-order"
-        headers = self._get_headers()
-        headers["tr_id"] = "TTTC8001R" if self.broker_account.is_mock else "TTTC8001R"
+        """주문 상태/체결 조회 (일별 주문체결조회 기반).
 
+        Note:
+        - KIS '주식일별주문체결조회'는 기본적으로 날짜 구간으로 조회합니다.
+        - 여기서는 당일 범위로 조회 후 ODNO로 필터링하는 형태로 구현합니다.
+        """
+        url = f"{self._base_url}/uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+        headers = self._get_headers()
+        headers["tr_id"] = "VTTC0081R" if self.broker_account.is_mock else "TTTC0081R"
+
+        today = datetime.utcnow().strftime("%Y%m%d")
         params = {
             "CANO": self.broker_account.broker_account_no_masked or "",
             "ACNT_PRDT_CD": self.broker_account.product_code or "01",
+            "INQR_STRT_DT": today,
+            "INQR_END_DT": today,
+            "SLL_BUY_DVSN_CD": "00",  # 00 전체
+            "INQR_DVSN": "00",
+            "PDNO": "",
+            "CCLD_DVSN": "00",  # 00 전체(체결+미체결)
+            "ORD_GNO_BRNO": "",
+            "ODNO": order_id,
+            "EXCG_ID_DVSN_CD": "ALL",
             "CTX_AREA_FK100": "",
             "CTX_AREA_NK100": "",
-            "INQR_DVSN_1": "0",
-            "INQR_DVSN_2": "0",
         }
 
         response = requests.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
+        self._raise_if_kis_error(data, "주식일별주문체결조회")
 
-        # 주문번호로 필터링 (실제로는 체결 조회 API 사용 필요)
-        # 여기서는 간단한 구조로 반환
-        output = data.get("output", [])
+        output1 = data.get("output1") or []
+        if not isinstance(output1, list):
+            output1 = []
 
-        for item in output:
-            if item.get("ODNO") == order_id:
-                ord_stat = item.get("ORD_STAT_CD", "")
-                status_map = {
-                    "00": "pending",
-                    "01": "partially_filled",
-                    "02": "filled",
-                    "03": "cancelled",
-                    "04": "rejected",
-                }
-                
-                return {
-                    "order_id": order_id,
-                    "status": status_map.get(ord_stat, "unknown"),
-                    "requested_quantity": Decimal(str(item.get("ORD_QTY", "0"))),
-                    "filled_quantity": Decimal(str(item.get("EXEC_QTY", "0"))),
-                    "average_price": Decimal(str(item.get("EXEC_AVG_PRIC", "0"))),
-                    "executions": [],  # 체결 내역은 별도 API로 조회 필요
-                }
+        # Filter by order id (ODNO)
+        items = [x for x in output1 if isinstance(x, dict) and str(x.get("ODNO", "")).strip() == str(order_id).strip()]
+        if not items:
+            return {
+                "order_id": order_id,
+                "status": "unknown",
+                "requested_quantity": Decimal("0"),
+                "filled_quantity": Decimal("0"),
+                "average_price": Decimal("0"),
+                "executions": [],
+            }
+
+        # Heuristic mapping:
+        # - Use order qty / filled qty if present
+        # - If filled qty equals order qty and > 0 -> filled
+        req_qty = Decimal(str(items[0].get("ORD_QTY", "0") or 0))
+        filled_qty = Decimal(str(items[0].get("CCLD_QTY", items[0].get("EXEC_QTY", "0") or 0) or 0))
+        avg_price = Decimal(str(items[0].get("AVG_PRC", items[0].get("EXEC_AVG_PRIC", "0") or 0) or 0))
+
+        status = "pending"
+        if filled_qty > 0 and req_qty > 0 and filled_qty >= req_qty:
+            status = "filled"
+        elif filled_qty > 0:
+            status = "partially_filled"
+
+        executions = []
+        for it in items:
+            ex_id = str(it.get("ODNO", "")).strip()
+            # include ccld time/seq if present
+            tmd = str(it.get("ORD_TMD", it.get("CCLD_TMD", "")) or "").strip()
+            seq = str(it.get("CCLD_NO", it.get("EXEC_NO", "")) or "").strip()
+            if tmd or seq:
+                ex_id = f"{ex_id}:{tmd}:{seq}"
+
+            q = Decimal(str(it.get("CCLD_QTY", it.get("EXEC_QTY", "0") or 0) or 0))
+            p = Decimal(str(it.get("CCLD_PRC", it.get("EXEC_PRC", "0") or 0) or 0))
+            if q > 0 and p > 0:
+                executions.append(
+                    {
+                        "execution_id": ex_id,
+                        "quantity": q,
+                        "price": p,
+                        "executed_at": datetime.utcnow(),
+                    }
+                )
 
         return {
             "order_id": order_id,
-            "status": "unknown",
-            "requested_quantity": Decimal("0"),
-            "filled_quantity": Decimal("0"),
-            "average_price": Decimal("0"),
-            "executions": [],
+            "status": status,
+            "requested_quantity": req_qty,
+            "filled_quantity": filled_qty,
+            "average_price": avg_price,
+            "executions": executions,
         }
 
 
