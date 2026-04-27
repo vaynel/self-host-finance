@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from decimal import Decimal
+import logging
 import requests
 
 from app.brokers.base import BrokerAdapter
@@ -12,6 +13,7 @@ from app.config import get_settings
 from sqlalchemy.orm import Session
 
 settings = get_settings()
+logger = logging.getLogger("finflow.kis")
 
 
 def normalize_kis_account_input(raw: str) -> Tuple[str, Optional[str]]:
@@ -287,7 +289,23 @@ class KISAdapter(BrokerAdapter):
         output = result.get("output") if isinstance(result, dict) else None
         if not isinstance(output, dict):
             output = {}
-        order_no = (output.get("ODNO") or result.get("ODNO") or output.get("odno") or result.get("odno") or "").strip()
+        order_no = str((output.get("ODNO") or result.get("ODNO") or output.get("odno") or result.get("odno") or "")).strip()
+        krx_orgno = str((output.get("KRX_FWDG_ORD_ORGNO") or output.get("krx_fwdg_ord_orgno") or "")).strip()
+        ord_tmd = str((output.get("ORD_TMD") or output.get("ord_tmd") or "")).strip()
+
+        # Diagnostic log (do not log tokens/appsecret)
+        logger.info(
+            "KIS order-cash ok: side=%s ticker=%s qty=%s order_type=%s tr_id=%s mock=%s odno=%s orgno=%s ord_tmd=%s",
+            side,
+            ticker,
+            str(int(quantity)),
+            order_type,
+            headers.get("tr_id"),
+            bool(self.broker_account.is_mock),
+            order_no,
+            krx_orgno,
+            ord_tmd,
+        )
 
         return {
             "order_id": order_no,  # 주문번호(ODNO)
