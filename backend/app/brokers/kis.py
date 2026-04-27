@@ -1,6 +1,6 @@
 """KIS (Korea Investment & Securities) broker adapter."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from decimal import Decimal
 import requests
@@ -306,12 +306,15 @@ class KISAdapter(BrokerAdapter):
         headers = self._get_headers()
         headers["tr_id"] = "VTTC0081R" if self.broker_account.is_mock else "TTTC0081R"
 
-        today = datetime.utcnow().strftime("%Y%m%d")
+        # Search window: last 7 days (orders may be placed around midnight UTC/KST)
+        now = datetime.utcnow()
+        end_dt = now.strftime("%Y%m%d")
+        start_dt = (now - timedelta(days=7)).strftime("%Y%m%d")
         params = {
             "CANO": self.broker_account.broker_account_no_masked or "",
             "ACNT_PRDT_CD": self.broker_account.product_code or "01",
-            "INQR_STRT_DT": today,
-            "INQR_END_DT": today,
+            "INQR_STRT_DT": start_dt,
+            "INQR_END_DT": end_dt,
             "SLL_BUY_DVSN_CD": "00",  # 00 전체
             "INQR_DVSN": "00",
             "PDNO": "",
@@ -319,6 +322,9 @@ class KISAdapter(BrokerAdapter):
             "ORD_GNO_BRNO": "",
             "ODNO": order_id,
             "EXCG_ID_DVSN_CD": "ALL",
+            # Optional params from docs/examples (keep conservative defaults)
+            "INQR_DVSN_3": "00",
+            "INQR_DVSN_1": "",
             "CTX_AREA_FK100": "",
             "CTX_AREA_NK100": "",
         }
@@ -332,8 +338,13 @@ class KISAdapter(BrokerAdapter):
         if not isinstance(output1, list):
             output1 = []
 
-        # Filter by order id (ODNO)
-        items = [x for x in output1 if isinstance(x, dict) and str(x.get("ODNO", "")).strip() == str(order_id).strip()]
+        # Filter by order id (ODNO) - docs use lower-case keys (e.g. 'odno')
+        oid = str(order_id).strip()
+        items = [
+            x
+            for x in output1
+            if isinstance(x, dict) and str(x.get("odno", x.get("ODNO", "")) or "").strip() == oid
+        ]
         if not items:
             return {
                 "order_id": order_id,
@@ -344,39 +355,29 @@ class KISAdapter(BrokerAdapter):
                 "executions": [],
             }
 
-        # Heuristic mapping:
-        # - Use order qty / filled qty if present
-        # - If filled qty equals order qty and > 0 -> filled
-        req_qty = Decimal(str(items[0].get("ORD_QTY", "0") or 0))
-        filled_qty = Decimal(str(items[0].get("CCLD_QTY", items[0].get("EXEC_QTY", "0") or 0) or 0))
-        avg_price = Decimal(str(items[0].get("AVG_PRC", items[0].get("EXEC_AVG_PRIC", "0") or 0) or 0))
+        row = items[0]
+        req_qty = Decimal(str(row.get("ord_qty", row.get("ORD_QTY", "0")) or 0))
+        filled_qty = Decimal(str(row.get("tot_ccld_qty", row.get("TOT_CCLD_QTY", "0")) or 0))
+        avg_price = Decimal(str(row.get("avg_prvs", row.get("AVG_PRVS", "0")) or 0))
+        rmn_qty = Decimal(str(row.get("rmn_qty", row.get("RMN_QTY", "0")) or 0))
+        rjct_qty = Decimal(str(row.get("rjct_qty", row.get("RJCT_QTY", "0")) or 0))
+        cncl_yn = str(row.get("cncl_yn", row.get("CNCL_YN", "")) or "").strip().upper()
 
-        status = "pending"
-        if filled_qty > 0 and req_qty > 0 and filled_qty >= req_qty:
+        # Status heuristic (KIS does not return our internal enum directly)
+        if cncl_yn == "Y":
+            status = "cancelled"
+        elif filled_qty > 0 and rmn_qty == 0:
             status = "filled"
         elif filled_qty > 0:
             status = "partially_filled"
+        elif rjct_qty > 0 and filled_qty == 0:
+            status = "rejected"
+        else:
+            status = "pending"
 
-        executions = []
-        for it in items:
-            ex_id = str(it.get("ODNO", "")).strip()
-            # include ccld time/seq if present
-            tmd = str(it.get("ORD_TMD", it.get("CCLD_TMD", "")) or "").strip()
-            seq = str(it.get("CCLD_NO", it.get("EXEC_NO", "")) or "").strip()
-            if tmd or seq:
-                ex_id = f"{ex_id}:{tmd}:{seq}"
-
-            q = Decimal(str(it.get("CCLD_QTY", it.get("EXEC_QTY", "0") or 0) or 0))
-            p = Decimal(str(it.get("CCLD_PRC", it.get("EXEC_PRC", "0") or 0) or 0))
-            if q > 0 and p > 0:
-                executions.append(
-                    {
-                        "execution_id": ex_id,
-                        "quantity": q,
-                        "price": p,
-                        "executed_at": datetime.utcnow(),
-                    }
-                )
+        # inquire-daily-ccld returns totals per order, not per-execution breakdown.
+        # We'll return empty executions list; downstream can synthesize 1 execution from filled_qty/avg_price.
+        executions: list[dict] = []
 
         return {
             "order_id": order_id,
