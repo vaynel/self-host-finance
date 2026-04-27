@@ -299,6 +299,14 @@ async def evaluate_once() -> None:
                     continue
 
                 qty = Decimal(str(h.quantity or 0)) * Decimal(str(gr.sell_quantity_ratio or 1))
+                # Safety: never exceed holdings, and skip if < 1 share (KIS orders are integer shares)
+                holding_qty = Decimal(str(h.quantity or 0))
+                if holding_qty <= 0:
+                    continue
+                if qty > holding_qty:
+                    qty = holding_qty
+                # floor to integer shares
+                qty = Decimal(int(qty))
                 if qty <= 0:
                     continue
 

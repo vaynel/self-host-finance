@@ -245,6 +245,32 @@ class KISAdapter(BrokerAdapter):
             "timestamp": datetime.utcnow(),
         }
 
+    def get_sellable_quantity(self, ticker: str) -> Decimal:
+        """매도가능수량 조회 (KIS: inquire-psbl-sell, TTTC8408R).
+
+        Returns:
+            Decimal: 주문가능수량(ord_psbl_qty)
+        """
+        url = f"{self._base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-sell"
+        headers = self._get_headers()
+        headers["tr_id"] = "TTTC8408R"  # 모의투자 미지원(엑셀 기준)
+
+        params = {
+            "CANO": self.broker_account.broker_account_no_masked or "",
+            "ACNT_PRDT_CD": self.broker_account.product_code or "01",
+            "PDNO": ticker,
+        }
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        self._raise_if_kis_error(data, "매도가능수량조회")
+
+        output = data.get("output") or data.get("output1") or {}
+        if not isinstance(output, dict):
+            output = {}
+        qty = Decimal(str(output.get("ord_psbl_qty", output.get("ORD_PSBL_QTY", "0")) or 0))
+        return qty
+
     def place_order(
         self,
         ticker: str,

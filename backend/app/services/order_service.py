@@ -134,6 +134,18 @@ def create_order(
         raise_400("지정가 주문은 가격이 필요합니다.")
 
     adapter = KISAdapter(db, broker_account)
+    # Pre-check to reduce broker-side rejections (best effort)
+    if side == "sell":
+        try:
+            sellable = adapter.get_sellable_quantity(ticker)
+            if sellable <= 0:
+                raise_400("매도가능수량이 없습니다.")
+            if quantity > sellable:
+                raise_400(f"매도가능수량을 초과했습니다. (요청={quantity}, 가능={sellable})")
+        except Exception as e:
+            # If the pre-check fails (API/parse), don't block the order attempt.
+            # The broker_result error path will still report the failure.
+            pass
     try:
         broker_result = adapter.place_order(
             ticker=ticker,
