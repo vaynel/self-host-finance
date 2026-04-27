@@ -184,6 +184,42 @@ def create_order(
     return _to_order_dict(order, [])
 
 
+def cancel_order(db: Session, user_id: str, order_id: str) -> Dict[str, Any]:
+    """취소 요청: KIS 정정/취소 API로 잔량 전부 취소."""
+    order = db.query(InvestmentOrder).filter(InvestmentOrder.id == order_id, InvestmentOrder.user_id == user_id).first()
+    if not order:
+        raise_404("주문을 찾을 수 없습니다.")
+    if not order.broker_account_id or not order.broker_order_id:
+        raise_400("브로커 주문번호가 없어 취소할 수 없습니다.")
+
+    broker_account = db.query(BrokerAccount).filter(BrokerAccount.id == order.broker_account_id).first()
+    if not broker_account or not broker_account.api_enabled:
+        raise_400("브로커 연동이 비활성화되어 취소할 수 없습니다.")
+
+    adapter = KISAdapter(db, broker_account)
+    rows = adapter.list_psbl_rvsecncl()
+    target = None
+    oid = str(order.broker_order_id).strip()
+    for r in rows:
+        if str(r.get("odno", r.get("ODNO", "")) or "").strip() == oid:
+            target = r
+            break
+    if not target:
+        raise_400("정정/취소 가능 주문 목록에서 해당 주문을 찾지 못했습니다.")
+
+    orgno = (target.get("krx_fwdg_ord_orgno") or target.get("KRX_FWDG_ORD_ORGNO") or "").strip()
+    if not orgno:
+        raise_400("취소에 필요한 KRX_FWDG_ORD_ORGNO를 찾지 못했습니다.")
+
+    adapter.cancel_order(krx_fwdg_ord_orgno=orgno, orgn_odno=oid)
+    order.status = OrderStatus.CANCELLED.value
+    order.cancelled_at = datetime.utcnow()
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return _to_order_dict(order, [])
+
+
 def list_orders(
     db: Session,
     user_id: str,

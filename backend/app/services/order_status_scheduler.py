@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timedelta
 
 from app.database import SessionLocal
 from app.models.investment_order import InvestmentOrder
@@ -18,6 +19,19 @@ async def poll_order_status_once() -> None:
     """Poll pending/partially_filled orders and trigger execution collection."""
     db = SessionLocal()
     try:
+        # Cleanup orphan pending orders that have no broker_order_id (stuck rows)
+        # Keep it conservative: only very old rows.
+        cutoff = datetime.utcnow() - timedelta(minutes=10)
+        db.query(InvestmentOrder).filter(
+            InvestmentOrder.status.in_(["pending", "partially_filled"]),
+            (InvestmentOrder.broker_order_id.is_(None)) | (InvestmentOrder.broker_order_id == ""),
+            InvestmentOrder.requested_at < cutoff,
+        ).update(
+            {"status": "failed", "updated_at": datetime.utcnow()},
+            synchronize_session=False,
+        )
+        db.commit()
+
         orders = (
             db.query(InvestmentOrder)
             .filter(InvestmentOrder.status.in_(["pending", "partially_filled"]))

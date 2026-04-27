@@ -15,7 +15,7 @@ from app.services.investment_service import (
     list_price_history,
     sync_holdings_snapshot,
 )
-from app.services.order_service import create_order, get_order_status, list_orders, collect_executions
+from app.services.order_service import create_order, get_order_status, list_orders, collect_executions, cancel_order
 from app.services.auto_trade_service import (
     list_rules,
     create_rule,
@@ -176,6 +176,17 @@ def refresh_order_route(
         "order": order,
         "new_executions": new_executions,
     })
+
+
+@router.post("/orders/{order_id}/cancel")
+def cancel_order_route(
+    order_id: str,
+    current_user: User = Depends(get_current_user),
+    db: DbSession = None,
+):
+    """Cancel an existing order (best-effort)."""
+    order = cancel_order(db, current_user.id, order_id)
+    return success_response(order)
 
 
 # ==================== 자동매매 규칙 API ====================

@@ -271,6 +271,70 @@ class KISAdapter(BrokerAdapter):
         qty = Decimal(str(output.get("ord_psbl_qty", output.get("ORD_PSBL_QTY", "0")) or 0))
         return qty
 
+    def list_psbl_rvsecncl(self) -> list[dict]:
+        """정정/취소 가능 주문 조회 (KIS: inquire-psbl-rvsecncl, TTTC0084R).
+
+        Returns:
+            list[dict]: output array rows (raw dicts)
+        """
+        url = f"{self._base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl"
+        headers = self._get_headers()
+        headers["tr_id"] = "TTTC0084R"  # 모의투자 미지원(엑셀 기준)
+
+        params = {
+            "CANO": self.broker_account.broker_account_no_masked or "",
+            "ACNT_PRDT_CD": self.broker_account.product_code or "01",
+            "CTX_AREA_FK100": "",
+            "CTX_AREA_NK100": "",
+            "INQR_DVSN_1": "0",
+            "INQR_DVSN_2": "0",
+        }
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        self._raise_if_kis_error(data, "정정취소가능주문조회")
+
+        out = data.get("output") or []
+        if not isinstance(out, list):
+            out = []
+        return [x for x in out if isinstance(x, dict)]
+
+    def cancel_order(self, *, krx_fwdg_ord_orgno: str, orgn_odno: str) -> Dict[str, Any]:
+        """주문 취소 (KIS: order-rvsecncl, TTTC0013U/VTTC0013U).
+
+        Args:
+            krx_fwdg_ord_orgno: KRX_FWDG_ORD_ORGNO (조직번호)
+            orgn_odno: ORGN_ODNO (원주문번호=ODNO)
+        """
+        url = f"{self._base_url}/uapi/domestic-stock/v1/trading/order-rvsecncl"
+        headers = self._get_headers()
+        headers["tr_id"] = "VTTC0013U" if self.broker_account.is_mock else "TTTC0013U"
+
+        payload = {
+            "CANO": self.broker_account.broker_account_no_masked or "",
+            "ACNT_PRDT_CD": self.broker_account.product_code or "01",
+            "KRX_FWDG_ORD_ORGNO": str(krx_fwdg_ord_orgno or "").strip(),
+            "ORGN_ODNO": str(orgn_odno or "").strip(),
+            "ORD_DVSN": "01",  # cancel as market by default (KIS sample uses order dvsn)
+            "RVSE_CNCL_DVSN_CD": "02",  # 02 cancel
+            "ORD_QTY": "0",
+            "ORD_UNPR": "0",
+            "QTY_ALL_ORD_YN": "Y",  # cancel remaining all
+        }
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        self._raise_if_kis_error(data, "주문 취소")
+
+        output = data.get("output") if isinstance(data, dict) else None
+        if not isinstance(output, dict):
+            output = {}
+        return {
+            "krx_fwdg_ord_orgno": output.get("KRX_FWDG_ORD_ORGNO") or output.get("krx_fwdg_ord_orgno") or "",
+            "odno": output.get("ODNO") or output.get("odno") or "",
+            "ord_tmd": output.get("ORD_TMD") or output.get("ord_tmd") or "",
+        }
+
     def place_order(
         self,
         ticker: str,
